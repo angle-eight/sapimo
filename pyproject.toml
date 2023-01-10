@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "sapimo"
+version = "0.0.1"
+description = ""
+authors = ["ajinori"]
+readme = "README.md"
+packages = [{include = "sapimo", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.8.1"
+fastapi = "^0.88.0"
+uvicorn = "^0.20.0"
+awscli = "^1.27.45"
+moto = "^4.0.13"
+boto3 = "^1.26.45"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^6.0.0"
+autopep8 = "^2.0.1"
+pytest = "^7.2.0"
+pytest-mock = "^3.10.0"
+pytest-cov = "^4.0.0"
+pytest-env = "^0.8.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+sapimo = "src.sapimo.main:main"
