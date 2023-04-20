@@ -5,9 +5,9 @@ from pathlib import Path
 import yaml
 from awscli.customizations.cloudformation.yamlhelper import yaml_parse
 
-from sapimo.utils import setup_logger
+from sapimo.utils import LogManager
 
-logger = setup_logger(__file__)
+logger = LogManager.setup_logger(__file__)
 
 
 class FnResolver:

@@ -5,10 +5,10 @@ from pathlib import Path
 import yaml
 from awscli.customizations.cloudformation.yamlhelper import yaml_parse
 
-from sapimo.utils import setup_logger, add_element
+from sapimo.utils import LogManager, add_element
 from sapimo.parser.fn_resolver import FnResolver
 
-logger = setup_logger(__file__)
+logger = LogManager.setup_logger(__file__)
 
 
 class CfResourceParser(FnResolver):

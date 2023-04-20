@@ -10,8 +10,8 @@ from .executer.lambda_invoker import LambdaInvoker
 from .mediator_route import MediatorRoute
 from .mock_manager import MockManager
 from sapimo.constants import CONFIG_FILE
-from sapimo.utils import setup_logger
-logger = setup_logger(__file__)
+from sapimo.utils import LogManager
+logger = LogManager.setup_logger(__file__)
 
 if not CONFIG_FILE.exists():
     print("config file not found")

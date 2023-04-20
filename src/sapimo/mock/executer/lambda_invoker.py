@@ -9,13 +9,14 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 from sapimo.parser.config_parser import ConfigParser
-from sapimo.utils import setup_logger
+from sapimo.utils import LogManager
 from sapimo.mock.executer.invoke_info import \
     ApiInfo, ApiV2Info, InvokeInfo, TokenAuthorizerInfo, RequestAuthorizerInfo
 from sapimo.constants import EventType, AuthType
 from sapimo.exceptions import LambdaInvokeError, EventConvertError
+from logging import DEBUG
 
-logger = setup_logger(__file__)
+logger = LogManager.setup_logger(__file__, level=DEBUG)
 
 
 class LambdaInvoker:
@@ -87,7 +88,14 @@ class LambdaInvoker:
 
         try:
             lambda_res = await self._lambda_exec(props, req)
-            return JSONResponse(json.loads(lambda_res["body"]))
+            status = lambda_res.get("statusCode", 500)
+            body = lambda_res.get("body")
+            try:
+                if not isinstance(body, dict):
+                    body = json.loads(body)
+                return JSONResponse(status_code=status, content=body)
+            except:
+                return Response(status_code=status, content=body)
         except ModuleNotFoundError as e:
             err_msg = "lambda code import error: " + str(e) + "\n"\
                 "- check 'CodeUri' or 'Layers'"\
@@ -131,11 +139,10 @@ class LambdaInvoker:
             # request to event
             try:
                 event = await props.to_event(event_src)
-                print(event)
             except Exception as e:
-                logger.exception("")
-                logger.error("lambda event convert error")
+                logger.exception("lambda event convert error")
                 raise EventConvertError()
+
 
             # import lambda code
             app = importlib.import_module(props.import_path)
@@ -148,9 +155,26 @@ class LambdaInvoker:
 
             # lambda execution
             try:
+                logger.info("--------- PARAMS --------")
+                qs =event.get("queryStringParameters", "")
+                bd = event.get("body", "")
+                logger.info(f"QueryStrings: {qs}")
+                logger.info(f"Body: {bd}")
+                logger.info("--------- ALL EVENT --------")
+                logger.info(event)
+                if hasattr(app, "logger"):
+                    lam_logger = app.logger
+                    log_changer = LogManager(lam_logger)
+                    logger.info("--------- LAMBDA LOG --------")
                 lambda_res = eval("app."+props.func)(event, None)
+                logger.info("---------- RESPONSE ---------")
+                logger.info(lambda_res)
+                if hasattr(app, "logger"):
+                    log_changer.deinit()
+                logger.info("-----------------------------")
                 return lambda_res
             except Exception as e:
+                logger.exception("lambda execute error")
                 raise LambdaInvokeError(str(e))
 
     async def get_example(self, req: Request, status: int):

@@ -3,8 +3,8 @@ import json
 
 import yaml
 
-from sapimo.utils import setup_logger
-logger = setup_logger(__file__)
+from sapimo.utils import LogManager
+logger = LogManager.setup_logger(__file__)
 
 
 class ConfigParser:

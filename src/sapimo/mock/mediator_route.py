@@ -1,12 +1,13 @@
 from typing import Callable
-import logging
+from logging import DEBUG
 from enum import Enum
+from datetime import datetime
 
 from fastapi import Request, Response
 from fastapi.routing import APIRoute
-from sapimo.utils import setup_logger
+from sapimo.utils import LogManager
 
-logger = setup_logger(__file__)
+logger = LogManager.setup_logger(__file__, level=DEBUG)
 
 
 class ReturnMode(Enum):
@@ -37,21 +38,30 @@ class MediatorRoute(APIRoute):
 
             return_val = self.return_mode
             if self.return_mode == ReturnMode.Default:
-                if not body:
-                    logger.info("return mock")
-                    return_val = ReturnMode.Mock
-                else:
-                    logger.info("lambda execute")
+                if not body or body == "null":
+                    logger.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]==========")
+                    logger.info(f"{req.url} ->lambda execute")
                     return_val = ReturnMode.Lambda
+                else:
+                    logger.info(f"{req.url} -> return mock")
+                    return_val = ReturnMode.Mock
 
             if return_val == ReturnMode.Lambda:
                 res = await self.lambda_manager.run_by_api(req)
                 self.data_manager.sync()
-                updated, deleted = self.data_manager.get_change("s3")
+                changed = self.data_manager.get_change("s3")
+                updated = changed.get("updated")
+                deleted = changed.get("deleted")
                 while updated or deleted:
                     await self.lambda_manager.run_by_trigger(updated, deleted)
                     self.data_manager.sync()
-                    updated, deleted = self.data_manager.get_change("s3")
+                    s3_changed = self.data_manager.get_change("s3")
+                    updated = s3_changed.get("updated", None)
+                    deleted = s3_changed.get("deleted", None)
+                    print("---updated---")
+                    print(updated)
+                    print("---deleted---")
+                    print(deleted)
 
             elif return_val == ReturnMode.Mock:
                 res = response

@@ -1,22 +1,65 @@
 from typing import Optional
 from pathlib import Path
-from copy import deepcopy
 import logging
 import sys
+from datetime import datetime
+from typing import Optional
+
+class LogManager:
+
+    log_file_path:Optional[Path] = None
+
+    @classmethod
+    def setup_logger(cls, name: str, level: int = logging.WARNING) -> logging.Logger:
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+        formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        stream_handler.setLevel(logging.WARNING)
+        log_dir = Path("mock_api/log")
+        if cls.log_file_path is None:
+            if not log_dir.exists():
+                log_dir.mkdir(parents=True)
+            filename = datetime.now().strftime("%Y-%m-%d_%H%M")
+            cls.log_file_path =log_dir /f"{filename}.log"
+        file_handler = logging.FileHandler(cls.log_file_path)
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.INFO)
+        logger.addHandler(stream_handler)
+        logger.addHandler(file_handler)
+        return logger
 
 
-def setup_logger(name: str, level: int = logging.WARNING) -> logging.Logger:
-    logger = logging.getLogger(name)
-    formatter = logging.Formatter('[%(levelname)s] %(message)s')
-    stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
-    logger.setLevel(level)
-    return logger
 
+    def __init__(self, logger:logging.Logger)->logging.Logger:
+        self._logger = logger
+        self._def_level = logger.level
+        logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        stream_handler.setLevel(self._def_level)
+        log_dir = Path("mock_api/log")
+        if self.log_file_path is None:
+            if not log_dir.exists():
+                log_dir.mkdir(parents=True)
+            filename = datetime.now().strftime("%Y-%m-%d_%H%M")
+            self.log_file_path =log_dir /f"{filename}.log"
+        file_handler = logging.FileHandler(self.log_file_path)
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.INFO)
+        logger.addHandler(stream_handler)
+        logger.addHandler(file_handler)
+        self._stream_handler = stream_handler
+        self._file_handler = file_handler
 
-logger = setup_logger(__file__)
+    def deinit(self):
+        self._logger.removeHandler(self._stream_handler)
+        self._logger.removeHandler(self._file_handler)
+        self._logger.setLevel(self._def_level)
 
+logger = LogManager.setup_logger(__file__)
 
 def search_config() -> Optional[Path]:
     """ search config file """

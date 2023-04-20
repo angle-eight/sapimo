@@ -2,12 +2,13 @@
 from copy import deepcopy
 from pathlib import Path
 
-from sapimo.utils import setup_logger, add_element
+from sapimo.utils import LogManager, add_element
 from sapimo.parser.cf_resource_parser import CfResourceParser
 from sapimo.constants import EventType, AuthType
-from sapimo.exceptions import SamTemplateParseError
+from sapimo.exceptions import SamTemplateParseError, DockerFileParseError
+from sapimo.parser.image_info import ImageInfo
 
-logger = setup_logger(__file__)
+logger =LogManager.setup_logger(__file__)
 
 
 class SamParser(CfResourceParser):
@@ -38,6 +39,25 @@ class SamParser(CfResourceParser):
         props: dict = deepcopy(val.get("Properties", {}))
         if val["Type"] == "AWS::Serverless::Function":
             add_element(props, self._function_globals)
+            if props["PackageType"] == "Image":
+                try:
+                    image_info = ImageInfo(val["Metadata"], self._root)
+                    props["CodeUri"] = image_info.code_uri
+                    props["Handler"] = image_info.handler
+                    if image_info.layers:
+                        props["Layers"] = image_info.layers
+                    props["Environment"] = {}
+                    props["Environment"]["Variables"] = image_info.envs
+                except DockerFileParseError as e:
+                    logger.warning(e.message)
+                    msg += "sapimo: sapimo can't interpret your Dockerfile.\n"\
+                        "you must edit mock_api/config.yaml"
+                    props["CodeUri"] = "edit here! (e.g. app/)"
+                    props["Handler"] = "edit here! (e.g. app.lambda_handler)"
+                    props["Environment"]["Variables"] = {"SAMPLE_ENV": "VAL"}
+                    props["Layers"] = [
+                        "if use outer dir, add here (e.g. /libs)"]
+                    logger.warning(msg)
             events = props.pop("Events", {})
             if not events:
                 # authorizer etc.

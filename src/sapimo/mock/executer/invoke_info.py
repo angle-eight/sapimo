@@ -9,8 +9,8 @@ from fastapi.requests import Request
 
 from sapimo.constants import EventType
 from sapimo.constants import AuthType
-from sapimo.utils import setup_logger
-logger = setup_logger(__file__)
+from sapimo.utils import LogManager
+logger = LogManager.setup_logger(__file__)
 
 
 class InvokeInfo:

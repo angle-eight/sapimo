@@ -13,3 +13,7 @@ class EventConvertError(SapimoException):
 
 class SamTemplateParseError(SapimoException):
     pass
+
+
+class DockerFileParseError(SapimoException):
+    pass

@@ -7,9 +7,9 @@ import click
 from sapimo.parser.config_parser import ConfigParser
 from sapimo.parser.sam_parser import SamParser
 from sapimo.parser.cdk_parser import CdkCfParser
-from sapimo.utils import create_config_template, setup_logger
+from sapimo.utils import create_config_template, LogManager
 from sapimo.constants import CONFIG_FILE, API_FILE, WORKING_DIR
-logger = setup_logger(__file__)
+logger = LogManager.setup_logger(__file__)
 
 
 @click.group()
@@ -103,7 +103,7 @@ def run(host: str, port: int):
     generate_api(API_FILE)
 
     lambda_path = Path.cwd()
-    sys.path.append(lambda_path)
+    sys.path.append(str(lambda_path))
 
     uvicorn.run("mock_api.app:api", host=host, port=port, reload=True)
 

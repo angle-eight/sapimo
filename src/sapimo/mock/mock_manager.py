@@ -4,6 +4,9 @@ from pathlib import Path
 import os
 import json
 import logging
+import base64
+from typing import Union, List
+from decimal import Decimal, InvalidOperation, Rounded
 
 import boto3
 from botocore.exceptions import ClientError
@@ -31,7 +34,7 @@ class AwsMock(ABC):
         pass
 
     @abstractmethod
-    def sync():
+    def sync() -> dict:
         pass
 
     @staticmethod
@@ -105,7 +108,7 @@ class SqsMock(AwsMock):
                 self._client.send_message(QueueUrl=url, MessageBody=msg)
                 file.unlink()
 
-    def sync(self):
+    def sync(self) -> dict:
         """
             sync  (sqs message -> local dir)
         """
@@ -131,6 +134,7 @@ class SqsMock(AwsMock):
                 with open(queue_path / (str(i).zfill(4)+".txt"), "w") as f:
                     f.write(body)
             self._last_messages[queue] = msgs
+            return {}  # FIXME
 
 
 class S3Mock(AwsMock):
@@ -174,7 +178,7 @@ class S3Mock(AwsMock):
                     hash = hashlib.md5(data).hexdigest()
                     self._hashes[bucket_name][key] = hash
 
-    def sync(self):
+    def sync(self) -> dict:
         """
             sync  (s3 bucket -> local dir)
 
@@ -201,7 +205,12 @@ class S3Mock(AwsMock):
                 if key not in self._hashes[bucket_name]\
                         or self._hashes[bucket_name][key] != hash:
                     # if s3 file is updated/created, update/create local file
-                    target_path = str(bucket_path) + "/" + key
+                    key_parts = key.split("/")
+                    target_path: Path = bucket_path
+                    for k in key_parts:
+                        if not target_path.exists():
+                            target_path.mkdir()
+                        target_path = target_path / k
                     with open(target_path, "wb") as f:
                         f.write(data)
                     updated.append(key)
@@ -218,7 +227,7 @@ class S3Mock(AwsMock):
             self._hashes[bucket_name] = new_hashes
             if deleted:
                 res_deleted[bucket_name] = list(deleted)
-        return res_updated, res_deleted
+        return {"updated": res_updated, "deleted": res_deleted}
 
 
 class DynamoMock(AwsMock):
@@ -246,22 +255,97 @@ class DynamoMock(AwsMock):
                 # ProvisionedThroughput=props["ProvisionedThroughput"]
             )
             table = self._dynamodb.Table(name)
-            file = self._local_dynamo_path / name / "data.json"
+            file: Path = self._local_dynamo_path / name / "data.json"
+            csv_file: Path = self._local_dynamo_path / name / "results.csv"
+            data = []
+
             if file.exists():
-                with open(file, "r") as f:
-                    data = json.load(f)
-                if not isinstance(data, list):
-                    data = [data]
-                try:
-                    with table.batch_writer() as batch:
-                        for row in data:
-                            batch.put_item(Item=row)
+                if file.stat().st_size < 4:  # skip if empty file
+                    print(f"{file.parent + file.name} is empty.")
+                else:
+                    with open(file, "r") as f:
+                        data = json.load(f, parse_float=Decimal)
+                    if not isinstance(data, list):
+                        data = [data]
+            elif csv_file.exists():
+                # for exported csv file from real AWS DynamoDB Table
+                # (in this case, double quotation is removed)
+                with open(csv_file, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                headers = [h.strip().strip('"') for h in lines[0].split(",")]
+                data = []
+                for rec in lines[1:]:
+                    row = {col: d
+                           for col, d in zip(headers, self.read_record_csv(rec))}
+                    data.append(row)
+            else:
+                return
 
-                except ClientError as e:
-                    logger.exception("dynamo init data error")
-                    # TODO
+            try:
+                with table.batch_writer() as batch:
+                    for row in data:
+                        batch.put_item(Item=row)
 
-    def sync(self):
+            except ClientError as e:
+                logger.exception("dynamo init data error")
+                # TODO
+
+    def read_record_csv(self, row: str) -> List[Union[str, Decimal, list, dict, set]]:
+        """ read one row of results.csv (from aws dynamo db table)"""
+        cells = []
+        elms = row.split(",")
+        tmp = ""
+        for elm in elms:
+            tmp = (tmp+","+elm) if tmp != "" else elm
+            if tmp.count("[") == tmp.count("]") \
+                    and tmp.count("{") == tmp.count("}"):
+                cells.append(self.interpret_dynamo_cell(tmp))
+                tmp = ""
+        return cells
+
+    def interpret_dynamo_cell(self, elm: str) -> Union[str, Decimal, list, dict, set]:
+        val = elm.strip().strip("\"")
+        if val.startswith("["):  # dynamo set or list
+            val = val[1:-1]  # remove []
+            if val:
+                res = [self.interpret_dynamo_cell(n) for n in val.split(",")]
+                return res if val.startswith("{") else set(res)
+            else:
+                return []
+        if val.startswith("{"):  # dynamo map or list item
+            pair = val[1:-1]  # remove {}
+            if not pair:
+                return {}
+            key, *rest = pair.split(":")
+            v = ":".join(rest)
+            key = key.strip("\"")
+            v = v.strip("\"")
+            if key == "S":
+                return v.strip("\"")
+            elif key == "N":
+                return Decimal(v.strip("\""))
+            elif key == "BOOL":
+                return bool(val.strip("\""))
+            elif key == "B":
+                return base64.b64decode(v.strip("\""))
+            elif key in ["SS", "NS", "BS", "L", "M"]:
+                return self.interpret_dynamo_cell(v)
+            else:
+                return {key: self.interpret_dynamo_cell(v)}
+        else:
+            val = val.strip("'")
+            try:
+                val = Decimal(val)
+                return val
+            except InvalidOperation:
+                return val
+
+    def sync(self) -> dict:
+        def obj_to_item(obj):
+            if isinstance(obj, Decimal):
+                return float(obj)
+            if isinstance(obj, set):
+                return list(obj)
         changed_table = []
         for name in self._config.keys():
             table = self._dynamodb.Table(name)
@@ -274,16 +358,15 @@ class DynamoMock(AwsMock):
                         local = json.load(f)
 
                 if local != items:
-                    print(items)
-                    print(local)
                     changed_table.append(name)
                     with open(file, "w") as f:
-                        json.dump(items, f, indent=4)
+                        json.dump(items, f, indent=4,
+                                  ensure_ascii=False, default=obj_to_item)
             else:
                 if file.exists():
                     file.unlink()
 
-        return changed_table
+        return {"tables": changed_table}
 
 
 class MockManager():
@@ -319,4 +402,4 @@ class MockManager():
             self._changed[mock.service_name] = mock.sync()
 
     def get_change(self, service: str):
-        return self._changed[service]
+        return self._changed.get(service, {})

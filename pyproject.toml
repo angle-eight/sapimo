@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "sapimo"
 version = "0.0.1"
-description = ""
+description = "SAM(lambda-APIgateway) API Mock"
 authors = ["ajinori"]
 readme = "README.md"
 packages = [{include = "sapimo", from = "src"}]
@@ -9,7 +9,7 @@ packages = [{include = "sapimo", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.8.1"
 fastapi = "^0.88.0"
-uvicorn = "^0.20.0"
+uvicorn = {extras = ["standard"], version = "^0.21.1"}
 awscli = "^1.27.45"
 moto = "^4.0.13"
 boto3 = "^1.26.45"
@@ -30,3 +30,10 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 sapimo = "src.sapimo.main:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-v -x"
+env = [
+    "D:TEST_FILE_DIR=AAA",
+]

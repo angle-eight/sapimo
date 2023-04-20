@@ -3,11 +3,11 @@ from copy import deepcopy
 from pathlib import Path
 
 
-from sapimo.utils import setup_logger
+from sapimo.utils import LogManager
 from sapimo.parser.cf_resource_parser import CfResourceParser
 from sapimo.constants import EventType, AuthType
 
-logger = setup_logger(__file__)
+logger = LogManager.setup_logger(__file__)
 
 
 class CdkCfParser(CfResourceParser):
@@ -49,6 +49,7 @@ class CdkCfParser(CfResourceParser):
         self._integrations_map = {}
         self._lambdas_map = {}
         self._layers_map = {}
+        self._api_resources_map = {}
 
         super()._preprocess(filepath, region)
 
@@ -66,7 +67,7 @@ class CdkCfParser(CfResourceParser):
             method = method.lower()
             integration_key = props["Target"].replace("integrations/", "")
             integration_key = self._treat(integration_key)
-            lambda_key = self._integrations_map.get(integration_key, {})\
+            lambda_key: dict = self._integrations_map.get(integration_key, {})\
                 .get("Properties", {}).get("IntegrationUri", "")
             auth_type = props.get("AuthorizationType", "")
             lambda_key = self._treat(lambda_key)
@@ -96,10 +97,62 @@ class CdkCfParser(CfResourceParser):
                 api_props["Layers"] = ls
             self._apis[api_path][method] = {"Properties": api_props}
 
-        elif tp == "AWS::ApiGateway":  # TODO: implement case rest api
-            pass
+        elif tp == "AWS::ApiGateway::Method":
+            method = props["HttpMethod"].lower()
+            api_resource_key = props["ResourceId"]
+            api_resource_key = self._treat(api_resource_key)
+            api_resource = self._api_resources_map.get(api_resource_key)
+            if not api_resource:
+                raise Exception()  # FIXME
+            path_parts = api_resource.get("Metadata", {})\
+                .get("aws:cdk:path", "").split("/")
+            path_parts: list = path_parts
+            path_parts = path_parts[path_parts.index("Default")+1:-1]
+            api_path = "/" + "/".join(path_parts)
+            if api_path not in self._apis:
+                self._apis[api_path] = {}
+            auth_type = props.get("AuthorizationType", "")
+            lambda_uri = props.get("Integration", {}).get("Uri", "")
+            if not lambda_uri:
+                # this api is not lambda integration
+                return
+            # uri = ~/~/~/LAMBDA_KEY/invocations
+            lambda_key = self._treat(lambda_uri).split("/")[-2]
+            lambda_ = self._lambdas_map.get(lambda_key)
+            if not lambda_:
+                # maybe cdk template is invalid
+                raise Exception()  # FIXME
+            api_props = self._api_props_from_lambda(lambda_, auth_type, False)
+            self._apis[api_path][method] = {"Properties": api_props}
+
         else:
             super()._classification(name, val)
+
+    def _api_props_from_lambda(self, lambda_, auth_type, is_apigw_v2):
+        code_uri = lambda_.get("Metadata", {}) .get("aws:asset:path", "")
+        l_props = lambda_.get("Properties", {})
+        atrs = ["Environment", "Handler", "Layers", "Runtime", "TimeOut"]
+        api_props = {}
+        for k in atrs:
+            if k in l_props:
+                api_props[k] = self._treat(l_props[k])
+        handler_file = api_props.get("Handler", "").split(".")[0]
+        api_props["CodeUri"] = self._search_code_uri(
+            code_uri, handler_file)
+        api_props["EventType"] = EventType.APIGW_V2.name if is_apigw_v2 else EventType.APIGW.name
+        atype = AuthType[auth_type] if auth_type else AuthType.NONE
+        api_props["AuthType"] = atype.name
+        layers = self._treat(l_props.get("Layers", []))
+        if layers:
+            ls = []
+            for layer_key in layers:
+                layer = self._layers_map.get(layer_key, {})
+                layer = self._treat(layer)
+                layer_uri = layer.get("Metadata", {})\
+                    .get("aws:asset:path", "")
+                ls.append(self._search_layer_uri(layer_uri))
+            api_props["Layers"] = ls
+        return api_props
 
     def _get_config_dict(self) -> dict:
         """ override: add api paths """
@@ -124,6 +177,9 @@ class CdkCfParser(CfResourceParser):
             self._layers_map[name] = resource
             return {"Ref": name,
                     "Arn": name}  # pass name instead of arn
+        elif tp == "AWS::ApiGateway::Resource":
+            self._api_resources_map[name] = resource
+            return {"Ref": name, "Arn": name}
         else:
             return super()._get_ref_and_attr(name, resource)
 
@@ -132,7 +188,7 @@ class CdkCfParser(CfResourceParser):
 
     def _search_code_uri(self, cdk_code_uri: str, handler_file: str = ""):
         """
-            search directory thant contains same as *.py in cdk_code_uri
+            search dir that contains same as *.py in cdk_code_uri
         """
         origin_dir = self._cdk_path / cdk_code_uri
         if not handler_file:
