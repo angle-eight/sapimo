@@ -88,8 +88,12 @@ class LambdaInvoker:
 
         try:
             lambda_res = await self._lambda_exec(props, req)
-            status = lambda_res.get("statusCode", 500)
-            body = lambda_res.get("body")
+            if(lambda_res is not None):
+                status = lambda_res.get("statusCode", 500)
+                body = lambda_res.get("body")
+            else:
+                status = 500
+                body = "No response from lambda"
             try:
                 if not isinstance(body, dict):
                     body = json.loads(body)
@@ -100,7 +104,7 @@ class LambdaInvoker:
             err_msg = "lambda code import error: " + str(e) + "\n"\
                 "- check 'CodeUri' or 'Layers'"\
                 f" of {props.path}.{props.method} "\
-                " in mock_api/config.yaml\n"\
+                " in .mock_api/config.yaml\n"\
                 "- check if the required modules are installed\n"\
                 "- check import section in your code\n"
             logger.error(err_msg)

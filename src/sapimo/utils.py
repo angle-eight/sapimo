@@ -17,7 +17,7 @@ class LogManager:
         stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(formatter)
         stream_handler.setLevel(logging.WARNING)
-        log_dir = Path("mock_api/log")
+        log_dir = Path(".mock_api/log")
         if cls.log_file_path is None:
             if not log_dir.exists():
                 log_dir.mkdir(parents=True)
@@ -40,7 +40,7 @@ class LogManager:
         stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(formatter)
         stream_handler.setLevel(self._def_level)
-        log_dir = Path("mock_api/log")
+        log_dir = Path(".mock_api/log")
         if self.log_file_path is None:
             if not log_dir.exists():
                 log_dir.mkdir(parents=True)
@@ -64,7 +64,7 @@ logger = LogManager.setup_logger(__file__)
 def search_config() -> Optional[Path]:
     """ search config file """
     filenames = ["config.yml", "config.yaml", "config.json"]
-    mock_dir = Path.cwd() / "mock_api"
+    mock_dir = Path.cwd() / ".mock_api"
     mock_dir.mkdir(exist_ok=True)
     for filename in filenames:
         config_filepath = mock_dir / filename
@@ -79,7 +79,7 @@ def search_config() -> Optional[Path]:
 def search_api_impl():
     """ search api implementation """
     filename = "app.py"
-    mock_dir = Path.cwd() / "mock_api"
+    mock_dir = Path.cwd() / ".mock_api"
     mock_dir.mkdir(exist_ok=True)
     api_filename = mock_dir / filename
     if api_filename.exists():

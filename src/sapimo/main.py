@@ -105,7 +105,7 @@ def run(host: str, port: int):
     lambda_path = Path.cwd()
     sys.path.append(str(lambda_path))
 
-    uvicorn.run("mock_api.app:api", host=host, port=port, reload=True)
+    uvicorn.run(".mock_api.app:api", host=host, port=port, reload=True)
 
 
 @main.command()

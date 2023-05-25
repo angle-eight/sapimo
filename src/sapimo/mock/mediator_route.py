@@ -4,6 +4,7 @@ from enum import Enum
 from datetime import datetime
 
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from sapimo.utils import LogManager
 
@@ -39,14 +40,13 @@ class MediatorRoute(APIRoute):
             return_val = self.return_mode
             if self.return_mode == ReturnMode.Default:
                 if not body or body == "null":
-                    logger.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]==========")
-                    logger.info(f"{req.url} ->lambda execute")
                     return_val = ReturnMode.Lambda
                 else:
-                    logger.info(f"{req.url} -> return mock")
                     return_val = ReturnMode.Mock
 
             if return_val == ReturnMode.Lambda:
+                logger.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]==========")
+                logger.info(f"{req.method}:{req.url} ->lambda execute")
                 res = await self.lambda_manager.run_by_api(req)
                 self.data_manager.sync()
                 changed = self.data_manager.get_change("s3")
@@ -64,7 +64,12 @@ class MediatorRoute(APIRoute):
                     print(deleted)
 
             elif return_val == ReturnMode.Mock:
-                res = response
+                logger.info(f"{req.method}:{req.url} -> return mock")
+                if isinstance(body, str) and  body.isdecimal() and body.isascii() and len(body)==3:
+                    res = JSONResponse(status_code=int(body), content={"message": "mock response"})
+                else:
+                    res = response
+                logger.info(f"response: status={res.status_code}, body={res.body}")
             elif return_val == ReturnMode.Example:
                 res = await self.lambda_manager.example(req, status=self.return_code)
             return res

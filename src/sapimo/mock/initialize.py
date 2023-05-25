@@ -1,6 +1,6 @@
 """
     actual "uvicorn run" entry point
-    (imported from mock_api/app.py)
+    (imported from .mock_api/app.py)
 """
 
 from fastapi.middleware.cors import CORSMiddleware
