@@ -105,7 +105,7 @@ def run(host: str, port: int):
     lambda_path = Path.cwd()
     sys.path.append(str(lambda_path))
 
-    uvicorn.run(".mock_api.app:api", host=host, port=port, reload=True)
+    uvicorn.run("api_mock.app:api", host=host, port=port, reload=True)
 
 
 @main.command()
@@ -121,16 +121,17 @@ def generate_api(filepath: Path):
         with open(filepath, "r") as f:
             implemented = [d for d in f.readlines() if d.startswith("@api")]
 
+
     config = ConfigParser(CONFIG_FILE)
     with open(filepath, "a", encoding="utf-8", newline="\n")as f:
         if not implemented:  # new file
             f.write("from sapimo.mock import api\n\n\n")
         else:
-            f.write("\n\n")
+            f.write("\n")
 
         for path, value in config.apis.items():
             for method in value.keys():
-                deco = "@api."+method + "('" + path + "')\n"
+                deco = "@api."+method + "(\"" + path + "\")\n"
                 if deco in implemented:
                     continue
                 func_name = path.replace("-", "_")\
@@ -140,4 +141,4 @@ def generate_api(filepath: Path):
                 if func_name.startswith("_"):
                     func_name = func_name[1:]
                 define = "async def " + func_name + "_" + method + "():\n"
-                f.writelines([deco, define, "    return\n\n\n"])
+                f.writelines(["\n", deco, define, "    return\n\n"])

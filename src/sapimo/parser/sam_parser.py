@@ -51,7 +51,7 @@ class SamParser(CfResourceParser):
                 except DockerFileParseError as e:
                     logger.warning(e.message)
                     msg += "sapimo: sapimo can't interpret your Dockerfile.\n"\
-                        "you must edit .mock_api/config.yaml"
+                        "you must edit api_mock/config.yaml"
                     props["CodeUri"] = "edit here! (e.g. app/)"
                     props["Handler"] = "edit here! (e.g. app.lambda_handler)"
                     props["Environment"]["Variables"] = {"SAMPLE_ENV": "VAL"}

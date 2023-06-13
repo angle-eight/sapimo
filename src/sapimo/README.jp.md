@@ -30,7 +30,7 @@ lambdaコード実行に必要な仮想環境は起動しておいてくださ�
 (portを省略した場合3000番ポートで起動します)
 
 # (option) API編集
-.mock_api下のappを編集することでAPIの動作を変更できます。
+api_mock下のappを編集することでAPIの動作を変更できます。
 
 ### パラメータの検証
 FAST apiの機能でAPIのパラメータを検証できます。
@@ -92,7 +92,7 @@ options.set(mode.mock, status=400)
 
 ## SAMやCDKを使っていない場合
 `sapimock init`
-.mock_api/config.yamlのダミーファイルが生成されるので編集する。
+api_mock/config.yamlのダミーファイルが生成されるので編集する。
 APIと実行ファイルを紐づける。
 
 ```yaml

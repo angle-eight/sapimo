@@ -104,7 +104,7 @@ class LambdaInvoker:
             err_msg = "lambda code import error: " + str(e) + "\n"\
                 "- check 'CodeUri' or 'Layers'"\
                 f" of {props.path}.{props.method} "\
-                " in .mock_api/config.yaml\n"\
+                " in api_mock/config.yaml\n"\
                 "- check if the required modules are installed\n"\
                 "- check import section in your code\n"
             logger.error(err_msg)

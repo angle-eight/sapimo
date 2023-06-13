@@ -1,7 +1,7 @@
 from pathlib import Path
 from enum import Enum
 
-WORKING_DIR = Path.cwd() / ".mock_api"
+WORKING_DIR = Path.cwd() / "api_mock"
 API_FILE = WORKING_DIR / "app.py"
 CONFIG_FILE = WORKING_DIR / "config.yaml"
 
