@@ -1,0 +1,27 @@
+paths:
+  "/test":
+    get:
+      Properties:
+        CodeUri: lambda/test/
+        Handler: app.lambda_handler
+        Runtime: python3.12
+        Timeout: 3
+        Environment:
+          Variables:
+            BUCKET_NAME: test-bucket
+            TABLE_NAME: test-table
+
+s3:
+  test-bucket:
+    BucketName: test-bucket
+
+dynamodb:
+  test-table:
+    TableName: test-table
+    AttributeDefinitions:
+    - AttributeName: id
+      AttributeType: S
+    KeySchema:
+    - AttributeName: id
+      KeyType: HASH
+    BillingMode: PAY_PER_REQUEST

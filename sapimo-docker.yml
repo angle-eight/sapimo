@@ -1,0 +1,46 @@
+# Sapimo Docker Configuration
+# This file is optional - sensible defaults are provided for all settings
+
+# Network settings (optional)
+# host: "127.0.0.1"  # Use "0.0.0.0" to accept external connections
+# port: 3000
+
+# Python version settings (optional)
+python:
+  # Default version for new lambdas (can be overridden by SAM/CDK template)
+  default_version: "3.12"
+
+  # Auto-install missing Python versions when detected in templates
+  auto_install_missing: true
+
+  # Pre-installed versions (all will be available, but you can customize)
+  # Comment out versions you don't need to reduce build time
+  versions:
+    - "3.8"
+    - "3.9"
+    - "3.10"
+    - "3.11"
+    - "3.12"
+    - "3.13"
+
+# AWS Mock settings (optional)
+aws_mocks:
+  # Persist data between container restarts
+  persist_data: true
+
+  # Pre-create S3 buckets from template
+  auto_create_buckets: true
+
+  # Pre-create DynamoDB tables from template
+  auto_create_tables: true
+
+# Development settings (optional)
+development:
+  # Reload on code changes
+  auto_reload: true
+
+  # Log level (DEBUG, INFO, WARNING, ERROR)
+  log_level: "INFO"
+
+  # Show lambda execution logs
+  show_lambda_logs: true

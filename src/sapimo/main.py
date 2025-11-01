@@ -1,19 +1,20 @@
-import uvicorn
 from typing import Callable
-import sys
 from pathlib import Path
 import click
 
-from sapimo.parser.config_parser import ConfigParser
+import os
+import subprocess
 from sapimo.parser.sam_parser import SamParser
 from sapimo.parser.cdk_parser import CdkCfParser
 from sapimo.utils import create_config_template, LogManager
-from sapimo.constants import CONFIG_FILE, API_FILE, WORKING_DIR
+from sapimo.constants import CONFIG_FILE, WORKING_DIR
+
 logger = LogManager.setup_logger(__file__)
 
 
 @click.group()
 def main():
+    """Sapimo - SAM API Mock Server"""
     pass
 
 
@@ -25,18 +26,23 @@ def main():
     help="AWS SAM's template file or AWS CDK's cloudformation file",
     show_default=True,
 )
-@click.option("--cdk", is_flag=True, help="true if CDK cloudformation file",)
+@click.option(
+    "--cdk",
+    is_flag=True,
+    help="true if CDK cloudformation file",
+)
 def init(template, cdk):
     if template == "":
         create_config_default()
     else:
         template_path = Path(template).resolve()
         parser = SamParser if not cdk else CdkCfParser
-        if not create_config(template_path, parse_class=parser,
-                             overwrite=False):
-            print(f"{template.name} file not found.\
+        if not create_config(template_path, parse_class=parser, overwrite=False):
+            print(
+                f"{template.name} file not found.\
                 dummy config.yaml is created.\
-                you need to change it.")
+                you need to change it."
+            )
             create_config_template(CONFIG_FILE)
             exit()
 
@@ -54,18 +60,16 @@ def create_config_default():
         files = [f for f in cdk_out.iterdir() if f.is_file()]
         for file in files:
             if file.name.endswith("template.json"):
-                create_config(file.resolve(), parse_class=CdkCfParser,
-                              overwrite=False)
+                create_config(file.resolve(), parse_class=CdkCfParser, overwrite=False)
                 break
         else:
             logger.warning("template.yaml or cdk cf file is not exist")
             exit(0)
 
 
-def create_config(template: Path, parse_class: Callable,
-                  overwrite: bool):
+def create_config(template: Path, parse_class: Callable, overwrite: bool):
     """
-        parse template.yaml and convert to config.yaml
+    parse template.yaml and convert to config.yaml
     """
     if not template.exists():
         return False
@@ -74,17 +78,128 @@ def create_config(template: Path, parse_class: Callable,
         try:
             parser = parse_class(template)
             parser.create_config_file(CONFIG_FILE, overwrite)
+
+            # Docker Compose自動生成
+            from sapimo.docker.compose_generator import DockerComposeGenerator
+
+            compose_gen = DockerComposeGenerator(CONFIG_FILE)
+            compose_gen.generate()
+            click.echo(f"Generated docker-compose.yml in {WORKING_DIR}")
+
             return True
-        except:
-            logger.exception("config parse error")
+        except Exception as e:
+            logger.exception("config parse error: %s", e)
             return False
+
+
+@main.command()
+def generate():
+    """Generate mock API endpoints from config.yaml"""
+    if not CONFIG_FILE.exists():
+        click.echo("config.yaml not found. Run 'sapimo init' first.")
+        return
+
+    generate_mock_api(WORKING_DIR / "app.py")
+
+
+def generate_mock_api(filepath: Path):
+    """Generate mock API endpoints with new Mock decorator syntax"""
+    from sapimo.parser.config_parser import ConfigParser
+
+    try:
+        config = ConfigParser(CONFIG_FILE)
+    except Exception as e:
+        click.echo(f"Error reading config.yaml: {e}")
+        return
+
+    # 既存の実装をチェック
+    implemented = []
+    if filepath.exists():
+        with open(filepath, "r") as f:
+            content = f.read()
+            # @api.method で始まる行をチェック
+            for line in content.split("\n"):
+                if line.strip().startswith("@api."):
+                    implemented.append(line.strip())
+
+    with open(filepath, "a", encoding="utf-8", newline="\n") as f:
+        if not implemented:  # 新規ファイル
+            f.write("from sapimo.mock import api, change_input\n\n")
+            f.write("# Generated mock API endpoints\n")
+            f.write("# Edit return values to customize mock behavior:\n")
+            f.write("# - return None: Execute actual Lambda function\n")
+            f.write("# - return {...}: Return mock data\n")
+            f.write(
+                "# - return change_input(...): Execute Lambda with modified input\n\n"
+            )
+        else:
+            f.write("\n")
+
+        for path, methods in config.apis.items():
+            for method in methods.keys():
+                # デコレータ定義
+                deco = f'@api.{method.lower()}("{path}")'
+
+                if deco in implemented:
+                    continue
+
+                # 関数名を生成
+                func_name = (
+                    path.replace("-", "_")
+                    .replace("/", "_")
+                    .replace("{", "p_")
+                    .replace("}", "")
+                )
+                if func_name.startswith("_"):
+                    func_name = func_name[1:]
+                func_name = f"{func_name}_{method.lower()}_mock"
+
+                # パスパラメータの抽出
+                import re
+
+                path_params = re.findall(r"\{([^}]+)\}", path)
+
+                # 関数定義
+                if path_params:
+                    # パスパラメータがある場合
+                    params = []
+                    for param in path_params:
+                        # 基本的な型推論（数値っぽいものはint）
+                        if any(
+                            word in param.lower()
+                            for word in ["id", "number", "count", "index"]
+                        ):
+                            params.append(f"{param}: int")
+                        else:
+                            params.append(f"{param}: str")
+                    param_str = ", ".join(params)
+                    func_def = f"async def {func_name}({param_str}):"
+                else:
+                    func_def = f"async def {func_name}():"
+
+                # コメントとデフォルト実装
+                comment = f'    """Mock for {method.upper()} {path}"""'
+                default_impl = "    pass  # Execute actual Lambda function"
+
+                f.writelines(
+                    [
+                        "\n",
+                        f"{deco}\n",
+                        f"{func_def}\n",
+                        f"{comment}\n",
+                        f"{default_impl}\n",
+                    ]
+                )
+
+    click.echo(f"Generated mock API endpoints in {filepath}")
+    click.echo("Edit the return values in app.py to customize mock behavior.")
 
 
 @main.command()
 @click.option(
     "--host",
     type=str,
-    default="127.0.0.1",
+    default="0.0.0.0",
     help="Bind socket to this host.",
     show_default=True,
 )
@@ -95,50 +210,155 @@ def create_config(template: Path, parse_class: Callable,
     help="Bind socket to this port.",
     show_default=True,
 )
-def run(host: str, port: int):
-    if not CONFIG_FILE.exists():
-        create_config_default()
+@click.option(
+    "--build",
+    is_flag=True,
+    help="Force rebuild the container image",
+)
+@click.option(
+    "--detach",
+    "-d",
+    is_flag=True,
+    help="Run in detached mode (background)",
+)
+def start(host: str, port: int, build: bool, detach: bool):
+    """Start Sapimo API mock server"""
 
-    # already update app.py
-    generate_api(API_FILE)
+    # Docker Composeファイルの存在確認（api_mockディレクトリ内）
+    compose_file = WORKING_DIR / "docker-compose.yml"
+    if not compose_file.exists():
+        click.echo("❌ docker-compose.yml not found. Run 'sapimo init' first.")
+        return
 
-    lambda_path = Path.cwd()
-    sys.path.append(str(lambda_path))
+    # api_mockディレクトリで実行
+    original_cwd = os.getcwd()
+    os.chdir(WORKING_DIR)
 
-    uvicorn.run("api_mock.app:api", host=host, port=port, reload=True)
+    # コンテナ起動
+    try:
+        cmd = ["docker-compose"]
+
+        if build:
+            cmd.extend(["up", "--build"])
+        else:
+            cmd.append("up")
+
+        if detach:
+            cmd.append("-d")
+
+        # 環境変数設定
+        env = os.environ.copy()
+        env.update(
+            {
+                "SAPIMO_HOST": host,
+                "SAPIMO_PORT": str(port),
+            }
+        )
+
+        subprocess.run(cmd, env=env, check=True)
+    except subprocess.CalledProcessError:
+        click.echo("❌ Failed to start container")
+    finally:
+        # 元のディレクトリに戻る
+        os.chdir(original_cwd)
 
 
 @main.command()
-def generate():
-    if not CONFIG_FILE.exists():
-        create_config_default()
-    generate_api(API_FILE)
+def status():
+    """Check mock data status"""
 
+    try:
+        cmd = [
+            "docker-compose",
+            "exec",
+            "sapimo-gateway",
+            "python",
+            "-c",
+            """
+import sys
+import json
+from pathlib import Path
+sys.path.append('/workspace/src')
 
-def generate_api(filepath: Path):
-    implemented = []
-    if filepath.exists():
-        with open(filepath, "r") as f:
-            implemented = [d for d in f.readlines() if d.startswith("@api")]
+try:
+    from sapimo.docker.mock_manager import DockerMockManager
+    from sapimo.constants import CONFIG_FILE
 
+    if CONFIG_FILE.exists():
+        mock_manager = DockerMockManager(CONFIG_FILE)
+        status = mock_manager.get_persistent_data_status()
 
-    config = ConfigParser(CONFIG_FILE)
-    with open(filepath, "a", encoding="utf-8", newline="\n")as f:
-        if not implemented:  # new file
-            f.write("from sapimo.mock import api\n\n\n")
+        if status:
+            print("📊 Mock Data Status:")
+            for service, data in status.items():
+                print(f"  {service}: {data}")
         else:
-            f.write("\n")
+            print("📊 No persistent data found")
+    else:
+        print("❌ Config file not found")
 
-        for path, value in config.apis.items():
-            for method in value.keys():
-                deco = "@api."+method + "(\"" + path + "\")\n"
-                if deco in implemented:
-                    continue
-                func_name = path.replace("-", "_")\
-                                .replace("/", "_")\
-                                .replace("{", "p_")\
-                                .replace("}", "_p")
-                if func_name.startswith("_"):
-                    func_name = func_name[1:]
-                define = "async def " + func_name + "_" + method + "():\n"
-                f.writelines(["\n", deco, define, "    return\n\n"])
+except Exception as e:
+    print(f"❌ Error: {e}")
+""",
+        ]
+
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError:
+        click.echo("❌ Failed to get status. Make sure the server is running.")
+
+
+@main.command()
+@click.option(
+    "--service",
+    multiple=True,
+    help="Specific services to clean (s3, dynamodb, sqs, sns, ses)",
+)
+@click.option(
+    "--confirm",
+    is_flag=True,
+    help="Skip confirmation prompt",
+)
+def clean(service, confirm):
+    """Clean AWS mock data"""
+
+    if not confirm:
+        services_str = ", ".join(service) if service else "all services"
+        if not click.confirm(f"Are you sure you want to clean {services_str} data?"):
+            click.echo("Cancelled")
+            return
+
+    try:
+        services_arg = ",".join(service) if service else ""
+        cmd = [
+            "docker-compose",
+            "exec",
+            "sapimo-gateway",
+            "python",
+            "-c",
+            f"""
+import sys
+sys.path.append('/workspace/src')
+try:
+    from sapimo.docker.mock_manager import DockerMockManager
+    from sapimo.constants import CONFIG_FILE
+
+    if CONFIG_FILE.exists():
+        mock_manager = DockerMockManager(CONFIG_FILE)
+        services = "{services_arg}".split(",") if "{services_arg}" else None
+        services = [s.strip() for s in services if s.strip()] if services else None
+
+        if mock_manager.cleanup_persistent_data(services):
+            print("✅ Mock data cleaned successfully")
+        else:
+            print("❌ Failed to clean mock data")
+    else:
+        print("❌ Config file not found")
+
+except Exception as e:
+    print(f"❌ Error: {{e}}")
+""",
+        ]
+
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError:
+        click.echo("❌ Failed to clean data. Make sure the server is running.")
