@@ -133,3 +133,12 @@ docs/memo.md
 
 # Sapimo generated files
 api_mock/docker-compose.yml
+api_mock/app.py
+
+# Sapimo runtime files
+*.bak
+api_mock/log/
+data/
+
+# Docker volumes and temp files
+docker-compose.yml.bak
