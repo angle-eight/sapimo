@@ -1,0 +1,56 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.pytest_cache
+*.egg-info/
+
+# Virtual environments (not needed in container)
+venv/
+env/
+.venv/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local development files
+.env
+.env.local
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test outputs
+test-results/
+coverage/
+
+# Local data directories (will be mounted as volumes)
+api_mock/log/
+api_mock/*.log
+
+# Temporary files
+tmp/
+temp/

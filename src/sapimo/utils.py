@@ -2,27 +2,43 @@ from typing import Optional
 from pathlib import Path
 import logging
 import sys
+import os
 from datetime import datetime
-from typing import Optional
+
 
 class LogManager:
-
-    log_file_path:Optional[Path] = None
+    log_file_path: Optional[Path] = None
 
     @classmethod
     def setup_logger(cls, name: str, level: int = logging.WARNING) -> logging.Logger:
         logger = logging.getLogger(name)
         logger.setLevel(level)
-        formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        formatter = logging.Formatter("[%(levelname)s] %(message)s")
         stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(formatter)
         stream_handler.setLevel(logging.WARNING)
-        log_dir = Path("api_mock/log")
+        # 環境変数でログディレクトリを指定可能
+        log_dir_env = os.getenv("LOG_DIR")
+        if log_dir_env:
+            log_dir = Path(log_dir_env)
+        else:
+            log_dir = Path("api_mock/log")
+
         if cls.log_file_path is None:
-            if not log_dir.exists():
-                log_dir.mkdir(parents=True)
-            filename = datetime.now().strftime("%Y-%m-%d_%H%M")
-            cls.log_file_path =log_dir /f"{filename}.log"
+            try:
+                if not log_dir.exists():
+                    log_dir.mkdir(parents=True)
+                filename = datetime.now().strftime("%Y-%m-%d_%H%M")
+                cls.log_file_path = log_dir / f"{filename}.log"
+            except (OSError, PermissionError):
+                # 書き込み権限がない場合は一時ディレクトリを使用
+                import tempfile
+
+                temp_dir = Path(tempfile.gettempdir()) / "sapimo_logs"
+                temp_dir.mkdir(exist_ok=True)
+                filename = datetime.now().strftime("%Y-%m-%d_%H%M")
+                cls.log_file_path = temp_dir / f"{filename}.log"
+
         file_handler = logging.FileHandler(cls.log_file_path)
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.INFO)
@@ -30,13 +46,11 @@ class LogManager:
         logger.addHandler(file_handler)
         return logger
 
-
-
-    def __init__(self, logger:logging.Logger)->logging.Logger:
+    def __init__(self, logger: logging.Logger) -> logging.Logger:
         self._logger = logger
         self._def_level = logger.level
         logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        formatter = logging.Formatter("[%(levelname)s] %(message)s")
         stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(formatter)
         stream_handler.setLevel(self._def_level)
@@ -45,7 +59,7 @@ class LogManager:
             if not log_dir.exists():
                 log_dir.mkdir(parents=True)
             filename = datetime.now().strftime("%Y-%m-%d_%H%M")
-            self.log_file_path =log_dir /f"{filename}.log"
+            self.log_file_path = log_dir / f"{filename}.log"
         file_handler = logging.FileHandler(self.log_file_path)
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.INFO)
@@ -59,10 +73,12 @@ class LogManager:
         self._logger.removeHandler(self._file_handler)
         self._logger.setLevel(self._def_level)
 
+
 logger = LogManager.setup_logger(__file__)
 
+
 def search_config() -> Optional[Path]:
-    """ search config file """
+    """search config file"""
     filenames = ["config.yml", "config.yaml", "config.json"]
     mock_dir = Path.cwd() / "api_mock"
     mock_dir.mkdir(exist_ok=True)
@@ -77,7 +93,7 @@ def search_config() -> Optional[Path]:
 
 
 def search_api_impl():
-    """ search api implementation """
+    """search api implementation"""
     filename = "app.py"
     mock_dir = Path.cwd() / "api_mock"
     mock_dir.mkdir(exist_ok=True)
@@ -133,7 +149,7 @@ dynamodb:      # if your lambda uses dynamoDB, "dynamodb" item is required.
 
 
 def add_element(d1: dict, d2: dict):
-    """ d1 has priority """
+    """d1 has priority"""
     for k, v in d1.items():
         if isinstance(v, dict) and isinstance(d2.get(k, {}), dict):
             add_element(v, d2.get(k, {}))

@@ -4,12 +4,13 @@ import json
 import yaml
 
 from sapimo.utils import LogManager
+
 logger = LogManager.setup_logger(__file__)
 
 
 class ConfigParser:
     """
-        read config.yaml and convert to useful form
+    read config.yaml and convert to useful form
     """
 
     def __init__(self, path: Path):
@@ -36,9 +37,9 @@ class ConfigParser:
                     method = k.lower()
                     self.apis[path][method] = v
             self.triggered = obj.get("triggered", {})
-        except:
+        except Exception as e:
             logger.exception("config parse error")
-            raise Exception("config parse error")
+            raise Exception("config parse error") from e
 
         self.all_resource = obj
 

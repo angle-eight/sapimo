@@ -17,7 +17,7 @@ class FnResolver:
         self._root: Path = filepath.parent
 
     def _preprocess(self, filepath: Path, region: str):
-        """ preprocess: this method is overridden from super class """
+        """preprocess: this method is overridden from super class"""
 
         id = "123456789012"
         dummy_params = {
@@ -26,20 +26,32 @@ class FnResolver:
             "AWS::NotificationARNs": ["arn1", "arn2", "arn3"],
             "AWS::NoValue": None,  # FIXME
             "AWS::Partition": "aws",
-            "AWS::StackId": "arn:aws:cloudformation:"+region+":"+id +\
-            ":stack/teststack/51af3dc0-da77-11e4-872e-1234567db123",
+            "AWS::StackId": "arn:aws:cloudformation:"
+            + region
+            + ":"
+            + id
+            + ":stack/teststack/51af3dc0-da77-11e4-872e-1234567db123",
             "AWS::StackName": "teststack",
-            "AWS::URLSuffix": "amazonaws.com"
+            "AWS::URLSuffix": "amazonaws.com",
         }
-        self._arn_tmp = "arn:aws:lambda:"+region + ":"+id+":{0}:{1}"
+        self._arn_tmp = "arn:aws:lambda:" + region + ":" + id + ":{0}:{1}"
         try:
             yaml_str = open(filepath).read()
             self._whole = yaml_parse(yaml_str)
-            logger.info(f'yaml_dict:{self._whole}')
+            logger.info(f"yaml_dict:{self._whole}")
         except yaml.parser.ParserError as e:
             logger.exception("yaml parse error")
+            self._whole = {}
         except yaml.scanner.ScannerError as e:
             logger.exception("yaml scan error")
+            self._whole = {}
+        except Exception as e:
+            logger.exception("yaml parse error")
+            self._whole = {}
+
+        # Ensure _whole is not None
+        if self._whole is None:
+            self._whole = {}
 
         self._mappings = self._whole.get("Mappings", {})
         self._conditions = self._whole.get("Conditions", {})
@@ -59,13 +71,13 @@ class FnResolver:
         self._whole = self._treat(self._whole)
 
     def _get_ref_and_attr(self, name: str, resource: dict):
-        """ for override """
+        """for override"""
         return {"Ref": name, "Arn": self._arn_tmp.format("other", name)}
 
     def _treat(self, dic: dict):
         """
-            treat and replace Function parts (Func::*)
-            and OrderedDict to dict
+        treat and replace Function parts (Func::*)
+        and OrderedDict to dict
         """
         if isinstance(dic, list):
             res = []
@@ -93,8 +105,7 @@ class FnResolver:
                     map_name = self._treat(val[0])
                     k1 = self._treat(val[1])
                     k2 = self._treat(val[2])
-                    res = self._mappings.get(
-                        map_name, {}).get(k1, {}).get(k2, "")
+                    res = self._mappings.get(map_name, {}).get(k1, {}).get(k2, "")
                 elif fn == "GetAZs":
                     res = ["us-east-1a", "us-east-1b"]  # dummy
                 elif fn == "ImportValue":
@@ -116,7 +127,7 @@ class FnResolver:
                         val_map = self._treat(val[1])
 
                     for k, v in val_map.items():
-                        old = "${"+k+"}"
+                        old = "${" + k + "}"
                         if old in res_str:
                             res_str = res_str.replace(old, v)
                     res = res_str

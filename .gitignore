@@ -130,3 +130,6 @@ dmypy.json
 
 event-sample
 docs/memo.md
+
+# Sapimo generated files
+api_mock/docker-compose.yml

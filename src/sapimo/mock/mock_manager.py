@@ -28,8 +28,8 @@ class AwsMock(ABC):
     @abstractmethod
     def init_data():
         """
-            this is called after 'mock.start'
-            (__init__ is called before 'mock.start')
+        this is called after 'mock.start'
+        (__init__ is called before 'mock.start')
         """
         pass
 
@@ -58,6 +58,14 @@ class SnsMock(AwsMock):
         self._mock = mock_sns()
         self._config = config
 
+    def init_data(self):
+        """SNS初期化（現在は何もしない）"""
+        pass
+
+    def sync(self) -> dict:
+        """SNS同期（現在は何もしない）"""
+        return {}
+
 
 class SesMock(AwsMock):
     service_name = "ses"
@@ -65,6 +73,14 @@ class SesMock(AwsMock):
     def __init__(self, config: dict):
         self._mock = mock_ses()
         self._config = config
+
+    def init_data(self):
+        """SES初期化（現在は何もしない）"""
+        pass
+
+    def sync(self) -> dict:
+        """SES同期（現在は何もしない）"""
+        return {}
 
 
 class SqsMock(AwsMock):
@@ -81,20 +97,24 @@ class SqsMock(AwsMock):
 
     def init_data(self):
         """
-            create sqs queue and upload message
+        create sqs queue and upload message
         """
-        self._client = boto3.client("sqs")
+        self._client = boto3.client("sqs", region_name="us-east-1")
         self._url_map = {}
         for key, value in self._config.items():
             name = value.pop("QueueName", key)
             tags = {t["Key"]: t["Value"] for t in value.pop("Tags", [])}
-            atrs = ["DelaySeconds", "MaximumMessageSize",
-                    "MessageRetentionPeriod", "ReceiveMessageWaitTimeSeconds",
-                    "RedrivePolicy"]
+            atrs = [
+                "DelaySeconds",
+                "MaximumMessageSize",
+                "MessageRetentionPeriod",
+                "ReceiveMessageWaitTimeSeconds",
+                "RedrivePolicy",
+            ]
             attributes = {k: v for k, v in value.items() if k in atrs}
-            url = self._client.create_queue(QueueName=name,
-                                            Attributes=attributes,
-                                            tags=tags)["QueueUrl"]
+            url = self._client.create_queue(
+                QueueName=name, Attributes=attributes, tags=tags
+            )["QueueUrl"]
             self._last_messages[key] = []
             self._url_map[key] = url
 
@@ -110,12 +130,14 @@ class SqsMock(AwsMock):
 
     def sync(self) -> dict:
         """
-            sync  (sqs message -> local dir)
+        sync  (sqs message -> local dir)
         """
         for queue in self._config.keys():
-            res = self._client.receive_message(QueueUrl=self._url_map[queue],
-                                               VisibilityTimeout=0,
-                                               MaxNumberOfMessages=10)
+            res = self._client.receive_message(
+                QueueUrl=self._url_map[queue],
+                VisibilityTimeout=0,
+                MaxNumberOfMessages=10,
+            )
             queue_path: Path = self._sqs_local_path / queue
             messages = res.get("Messages", [])
             if not messages:
@@ -131,7 +153,7 @@ class SqsMock(AwsMock):
                     file.unlink()
 
             for i, body in enumerate(msgs):
-                with open(queue_path / (str(i).zfill(4)+".txt"), "w") as f:
+                with open(queue_path / (str(i).zfill(4) + ".txt"), "w") as f:
                     f.write(body)
             self._last_messages[queue] = msgs
             return {}  # FIXME
@@ -154,10 +176,10 @@ class S3Mock(AwsMock):
 
     def init_data(self):
         """
-            upload file (local dir -> s3 bucket)
+        upload file (local dir -> s3 bucket)
         """
-        self._s3 = boto3.resource("s3")
-        self._client = boto3.client("s3")
+        self._s3 = boto3.resource("s3", region_name="us-east-1")
+        self._client = boto3.client("s3", region_name="us-east-1")
 
         for dir in self._s3_local_path.iterdir():
             if dir.is_file():
@@ -180,9 +202,9 @@ class S3Mock(AwsMock):
 
     def sync(self) -> dict:
         """
-            sync  (s3 bucket -> local dir)
+        sync  (s3 bucket -> local dir)
 
-            return ({ bucket:[updated_keys] },{ bucket:[deleted_keys] })
+        return ({ bucket:[updated_keys] },{ bucket:[deleted_keys] })
         """
         buckets = [m["Name"] for m in self._client.list_buckets()["Buckets"]]
         # print(buckets)
@@ -202,8 +224,10 @@ class S3Mock(AwsMock):
                 hash = hashlib.md5(data).hexdigest()
                 new_hashes[key] = hash
 
-                if key not in self._hashes[bucket_name]\
-                        or self._hashes[bucket_name][key] != hash:
+                if (
+                    key not in self._hashes[bucket_name]
+                    or self._hashes[bucket_name][key] != hash
+                ):
                     # if s3 file is updated/created, update/create local file
                     key_parts = key.split("/")
                     target_path: Path = bucket_path
@@ -218,8 +242,7 @@ class S3Mock(AwsMock):
                 res_updated[bucket_name] = updated
 
             # remove deleted file
-            deleted = set(
-                self._hashes[bucket_name].keys()) - set(new_hashes.keys())
+            deleted = set(self._hashes[bucket_name].keys()) - set(new_hashes.keys())
             for key in deleted:
                 target_path = str(bucket_path) + "/" + key
                 if os.path.exists(target_path):
@@ -245,7 +268,7 @@ class DynamoMock(AwsMock):
             table_path.mkdir(exist_ok=True)
 
     def init_data(self):
-        self._dynamodb = boto3.resource('dynamodb')
+        self._dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         for name, props in self._config.items():
             self._dynamodb.create_table(
                 **props  # ok?
@@ -275,8 +298,7 @@ class DynamoMock(AwsMock):
                 headers = [h.strip().strip('"') for h in lines[0].split(",")]
                 data = []
                 for rec in lines[1:]:
-                    row = {col: d
-                           for col, d in zip(headers, self.read_record_csv(rec))}
+                    row = {col: d for col, d in zip(headers, self.read_record_csv(rec))}
                     data.append(row)
             else:
                 return
@@ -291,20 +313,19 @@ class DynamoMock(AwsMock):
                 # TODO
 
     def read_record_csv(self, row: str) -> List[Union[str, Decimal, list, dict, set]]:
-        """ read one row of results.csv (from aws dynamo db table)"""
+        """read one row of results.csv (from aws dynamo db table)"""
         cells = []
         elms = row.split(",")
         tmp = ""
         for elm in elms:
-            tmp = (tmp+","+elm) if tmp != "" else elm
-            if tmp.count("[") == tmp.count("]") \
-                    and tmp.count("{") == tmp.count("}"):
+            tmp = (tmp + "," + elm) if tmp != "" else elm
+            if tmp.count("[") == tmp.count("]") and tmp.count("{") == tmp.count("}"):
                 cells.append(self.interpret_dynamo_cell(tmp))
                 tmp = ""
         return cells
 
     def interpret_dynamo_cell(self, elm: str) -> Union[str, Decimal, list, dict, set]:
-        val = elm.strip().strip("\"")
+        val = elm.strip().strip('"')
         if val.startswith("["):  # dynamo set or list
             val = val[1:-1]  # remove []
             if val:
@@ -318,16 +339,16 @@ class DynamoMock(AwsMock):
                 return {}
             key, *rest = pair.split(":")
             v = ":".join(rest)
-            key = key.strip("\"")
-            v = v.strip("\"")
+            key = key.strip('"')
+            v = v.strip('"')
             if key == "S":
-                return v.strip("\"")
+                return v.strip('"')
             elif key == "N":
-                return Decimal(v.strip("\""))
+                return Decimal(v.strip('"'))
             elif key == "BOOL":
-                return bool(val.strip("\""))
+                return bool(val.strip('"'))
             elif key == "B":
-                return base64.b64decode(v.strip("\""))
+                return base64.b64decode(v.strip('"'))
             elif key in ["SS", "NS", "BS", "L", "M"]:
                 return self.interpret_dynamo_cell(v)
             else:
@@ -346,6 +367,7 @@ class DynamoMock(AwsMock):
                 return float(obj)
             if isinstance(obj, set):
                 return list(obj)
+
         changed_table = []
         for name in self._config.keys():
             table = self._dynamodb.Table(name)
@@ -360,8 +382,9 @@ class DynamoMock(AwsMock):
                 if local != items:
                     changed_table.append(name)
                     with open(file, "w") as f:
-                        json.dump(items, f, indent=4,
-                                  ensure_ascii=False, default=obj_to_item)
+                        json.dump(
+                            items, f, indent=4, ensure_ascii=False, default=obj_to_item
+                        )
             else:
                 if file.exists():
                     file.unlink()
@@ -369,7 +392,7 @@ class DynamoMock(AwsMock):
         return {"tables": changed_table}
 
 
-class MockManager():
+class MockManager:
     def __init__(self, config_file):
         config = ConfigParser(config_file)
         services = ["s3", "dynamodb", "sns", "sqs", "ses"]
@@ -384,14 +407,12 @@ class MockManager():
     def start(self):
         for mock in self._services:
             mock.start()
-        logger.info(
-            f"start aws mock:{[m.service_name for m in self._services]}")
+        logger.info(f"start aws mock:{[m.service_name for m in self._services]}")
 
     def stop(self):
         for mock in self._services:
             mock.stop()
-        logger.info(
-            f"stop aws mock:{[m.service_name for m in self._services]}")
+        logger.info(f"stop aws mock:{[m.service_name for m in self._services]}")
 
     def init_data(self):
         for mock in self._services:
