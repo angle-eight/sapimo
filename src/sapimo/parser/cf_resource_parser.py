@@ -2,10 +2,10 @@ from copy import deepcopy
 from pathlib import Path
 
 import yaml
-from awscli.customizations.cloudformation.yamlhelper import yaml_parse
 
 from sapimo.utils import LogManager
 from sapimo.parser.fn_resolver import FnResolver
+from sapimo.parser.yaml_loader import yaml_parse
 
 logger = LogManager.setup_logger(__name__)
 
