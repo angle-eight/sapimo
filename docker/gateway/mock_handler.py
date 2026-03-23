@@ -6,8 +6,9 @@ api_mock/app.py の動的読み込みとMock処理
 import sys
 import importlib.util
 import asyncio
+import re
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from fastapi import Request, HTTPException
 import inspect
 import traceback
@@ -26,10 +27,46 @@ class MockHandler:
         self.last_modified = None
         self._mock_module = None
 
+    def _find_route_match(self, method: str, path: str) -> Tuple[Optional[str], Dict[str, str]]:
+        """
+        リクエストのメソッドとパスに一致するルートキーとパスパラメータを返す。
+        完全一致を優先し、次にパターンマッチを試みる。
+        Returns: (route_key or None, path_params dict)
+        """
+        # 完全一致
+        exact_key = f"{method.upper()}:{path}"
+        if exact_key in self.mock_routes:
+            return exact_key, {}
+
+        # パターンマッチ
+        for route_key, route_info in self.mock_routes.items():
+            parts = route_key.split(":", 1)
+            if len(parts) != 2:
+                continue
+            route_method, route_path = parts
+            if route_method != method.upper():
+                continue
+
+            # {param} を名前付きキャプチャグループに変換
+            param_names = re.findall(r"\{([^}]+)\}", route_path)
+            if not param_names:
+                continue
+
+            regex_pattern = route_path
+            for param_name in param_names:
+                regex_pattern = regex_pattern.replace(f"{{{param_name}}}", f"(?P<{param_name}>[^/]+)")
+            regex_pattern = f"^{regex_pattern}$"
+
+            m = re.match(regex_pattern, path)
+            if m:
+                return route_key, m.groupdict()
+
+        return None, {}
+
     def has_mock_definition(self, method: str, path: str) -> bool:
-        """指定されたメソッド・パスにMock定義があるかチェック"""
-        route_key = f"{method.upper()}:{path}"
-        return route_key in self.mock_routes
+        """指定されたメソッド・パスにMock定義があるかチェック（パターンマッチ対応）"""
+        route_key, _ = self._find_route_match(method, path)
+        return route_key is not None
 
     def reload_mock_definitions(self) -> bool:
         """api_mock/app.py を動的リロード"""
@@ -81,9 +118,9 @@ class MockHandler:
         self, method: str, path: str, request: Request
     ) -> Optional[Any]:
         """Mock リクエストを処理"""
-        route_key = f"{method.upper()}:{path}"
+        route_key, path_params = self._find_route_match(method, path)
 
-        if route_key not in self.mock_routes:
+        if route_key is None:
             return None
 
         route_info = self.mock_routes[route_key]
@@ -92,7 +129,7 @@ class MockHandler:
 
         try:
             # パラメータを準備
-            params = await self._prepare_parameters(signature, path, request)
+            params = await self._prepare_parameters(signature, path, request, path_params=path_params)
 
             # Mock関数を実行
             if asyncio.iscoroutinefunction(mock_func):
@@ -111,14 +148,14 @@ class MockHandler:
             )
 
     async def _prepare_parameters(
-        self, signature: inspect.Signature, path: str, request: Request
+        self, signature: inspect.Signature, path: str, request: Request,
+        path_params: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Mock関数のパラメータを準備"""
         params = {}
 
-        # パスパラメータの抽出（簡単な実装）
-        # TODO: より高度なパスマッチングが必要
-        path_params = self._extract_simple_path_params(path, request)
+        if path_params is None:
+            path_params = {}
 
         for param_name, param in signature.parameters.items():
             if param_name == "request":
@@ -132,7 +169,8 @@ class MockHandler:
                             value = int(value)
                         elif param.annotation is float:
                             value = float(value)
-                        # 他の型も必要に応じて追加
+                        elif param.annotation is bool:
+                            value = value.lower() in ("true", "1", "yes")
                     except (ValueError, TypeError) as e:
                         raise HTTPException(
                             status_code=422,

@@ -39,7 +39,7 @@ def init(template, cdk):
         parser = SamParser if not cdk else CdkCfParser
         if not create_config(template_path, parse_class=parser, overwrite=False):
             print(
-                f"{template.name} file not found.\
+                f"{template_path.name} file not found.\
                 dummy config.yaml is created.\
                 you need to change it."
             )
@@ -83,8 +83,11 @@ def create_config(template: Path, parse_class: Callable, overwrite: bool):
             from sapimo.docker.compose_generator import DockerComposeGenerator
 
             compose_gen = DockerComposeGenerator(CONFIG_FILE)
-            compose_gen.generate()
+            compose_gen.generate_compose_file()
             click.echo(f"Generated docker-compose.yml in {WORKING_DIR}")
+
+            # 旧記法チェック：生成されたconfig.yamlに古いフォーマット（handler直下）がないか確認
+            _warn_old_config_format(CONFIG_FILE)
 
             return True
         except Exception as e:
@@ -362,3 +365,27 @@ except Exception as e:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError:
         click.echo("❌ Failed to clean data. Make sure the server is running.")
+
+
+def _warn_old_config_format(config_path):
+    """旧記法の config.yaml を使用している場合に警告を出す"""
+    import yaml as _yaml
+
+    try:
+        if not Path(config_path).exists():
+            return
+        with open(config_path) as f:
+            cfg = _yaml.safe_load(f)
+        if not cfg:
+            return
+        paths = cfg.get("paths", {})
+        for path, methods in paths.items():
+            for method, props in methods.items():
+                if "handler" in (props or {}):
+                    click.echo(
+                        f"⚠️  旧記法検出: '{path}.{method}.handler' は旧フォーマットです。\n"
+                        "   新フォーマット: Properties.Handler / Properties.CodeUri を使用してください。\n"
+                        "   詳細: docs/Docker-Setup.md を参照"
+                    )
+    except Exception:
+        pass
