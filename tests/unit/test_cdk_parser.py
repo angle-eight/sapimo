@@ -128,9 +128,12 @@ def test_lambda_container_image_support():
 
     with (
         patch("pathlib.Path.exists", return_value=True),
-        patch("builtins.open", mock_open(read_data=json.dumps(container_template))),
         patch(
-            "awscli.customizations.cloudformation.yamlhelper.yaml_parse",
+            "sapimo.parser.fn_resolver.open",
+            mock_open(read_data=json.dumps(container_template)),
+        ),
+        patch(
+            "sapimo.parser.fn_resolver.yaml_parse",
             return_value=container_template,
         ),
     ):
@@ -161,9 +164,12 @@ def test_enhanced_error_handling():
 
     with (
         patch("pathlib.Path.exists", return_value=True),
-        patch("builtins.open", mock_open(read_data=json.dumps(invalid_template))),
         patch(
-            "awscli.customizations.cloudformation.yamlhelper.yaml_parse",
+            "sapimo.parser.fn_resolver.open",
+            mock_open(read_data=json.dumps(invalid_template)),
+        ),
+        patch(
+            "sapimo.parser.fn_resolver.yaml_parse",
             return_value=invalid_template,
         ),
     ):

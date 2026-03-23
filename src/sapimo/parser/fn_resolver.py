@@ -1,11 +1,9 @@
-from pprint import pprint
-from copy import deepcopy
 from pathlib import Path
 
 import yaml
-from awscli.customizations.cloudformation.yamlhelper import yaml_parse
 
 from sapimo.utils import LogManager
+from sapimo.parser.yaml_loader import yaml_parse
 
 logger = LogManager.setup_logger(__file__)
 
@@ -39,13 +37,13 @@ class FnResolver:
             yaml_str = open(filepath).read()
             self._whole = yaml_parse(yaml_str)
             logger.info(f"yaml_dict:{self._whole}")
-        except yaml.parser.ParserError as e:
+        except yaml.parser.ParserError:
             logger.exception("yaml parse error")
             self._whole = {}
-        except yaml.scanner.ScannerError as e:
+        except yaml.scanner.ScannerError:
             logger.exception("yaml scan error")
             self._whole = {}
-        except Exception as e:
+        except Exception:
             logger.exception("yaml parse error")
             self._whole = {}
 

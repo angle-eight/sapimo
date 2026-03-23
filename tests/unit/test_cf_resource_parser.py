@@ -22,9 +22,11 @@ def test_cf_parser_initialization():
 
     with (
         patch("pathlib.Path.exists", return_value=True),
-        patch("builtins.open", mock_open(read_data=json.dumps(template))),
         patch(
-            "awscli.customizations.cloudformation.yamlhelper.yaml_parse",
+            "sapimo.parser.fn_resolver.open", mock_open(read_data=json.dumps(template))
+        ),
+        patch(
+            "sapimo.parser.fn_resolver.yaml_parse",
             return_value=template,
         ),
     ):
@@ -358,9 +360,11 @@ def test_config_file_creation(tmp_path):
 
     with (
         patch("pathlib.Path.exists", return_value=True),
-        patch("builtins.open", mock_open()),
         patch(
-            "awscli.customizations.cloudformation.yamlhelper.yaml_parse",
+            "sapimo.parser.fn_resolver.open", mock_open(read_data=json.dumps(template))
+        ),
+        patch(
+            "sapimo.parser.fn_resolver.yaml_parse",
             return_value=template,
         ),
     ):
@@ -393,9 +397,11 @@ def test_error_handling_in_config_creation(tmp_path):
 
     with (
         patch("pathlib.Path.exists", return_value=True),
-        patch("builtins.open", mock_open()),
         patch(
-            "awscli.customizations.cloudformation.yamlhelper.yaml_parse",
+            "sapimo.parser.fn_resolver.open", mock_open(read_data=json.dumps(template))
+        ),
+        patch(
+            "sapimo.parser.fn_resolver.yaml_parse",
             return_value=template,
         ),
     ):
@@ -407,3 +413,28 @@ def test_error_handling_in_config_creation(tmp_path):
         assert config_file.exists()
         content = config_file.read_text()
         assert "error-test-bucket" in content
+
+
+def test_yaml_parse_supports_cloudformation_short_tags():
+    """Test local yaml parser for CloudFormation short tags"""
+    from sapimo.parser.yaml_loader import yaml_parse
+
+    parsed = yaml_parse(
+        """
+Resources:
+  SampleFunction:
+    Type: AWS::Lambda::Function
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${SampleApi}.execute-api.${AWS::Region}.amazonaws.com/"
+  FunctionArn:
+    Value: !GetAtt SampleFunction.Arn
+"""
+    )
+
+    assert parsed["Outputs"]["ApiUrl"]["Value"] == {
+        "Fn::Sub": "https://${SampleApi}.execute-api.${AWS::Region}.amazonaws.com/"
+    }
+    assert parsed["Outputs"]["FunctionArn"]["Value"] == {
+        "Fn::GetAtt": ["SampleFunction", "Arn"]
+    }
