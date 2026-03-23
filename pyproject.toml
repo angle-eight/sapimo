@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sapimo = "src.sapimo.main:main"
+sapimo = "sapimo.main:main"
 
 [dependency-groups]
 dev = [

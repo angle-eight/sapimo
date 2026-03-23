@@ -20,7 +20,7 @@ import sys
 
 sys.path.insert(0, "/workspace/src")
 from mock_handler import MockHandler
-from sapimo.mock.api import InputOverride
+from sapimo.mock.api import InputOverride, options
 
 
 class LambdaGateway:
@@ -158,14 +158,24 @@ class LambdaGateway:
                     elif isinstance(mock_result, (dict, str, list)):
                         # スタブとして固定値を返す
                         return JSONResponse(content=mock_result)
-                    elif isinstance(mock_result, int) and 200 <= mock_result < 300:
-                        # OpenAPI example を返す（TODO: 実装）
-                        return JSONResponse(
-                            content={
-                                "status": mock_result,
-                                "message": "OpenAPI example",
-                            }
+                    elif isinstance(mock_result, int) and 200 <= mock_result < 600:
+                        # OpenAPI example を返す
+                        from openapi_example_resolver import resolve_example
+
+                        api_path = f"/{path}"
+                        example_content, resolved_status = resolve_example(
+                            api_path, method, mock_result
                         )
+                        if example_content is not None:
+                            return JSONResponse(
+                                content=example_content,
+                                status_code=resolved_status,
+                            )
+                        else:
+                            return JSONResponse(
+                                content=None,
+                                status_code=mock_result,
+                            )
                     else:
                         # その他の戻り値もスタブとして処理
                         return JSONResponse(content=mock_result)
@@ -176,7 +186,14 @@ class LambdaGateway:
                         status_code=500, detail=f"Mock processing error: {str(e)}"
                     )
 
-            # 2. Lambda実行（Mock未定義 or None返却の場合）
+            # 2. 全体Mockモード時は、Mock未定義ルートでもデフォルト応答
+            if options.mode == "mock":
+                return JSONResponse(
+                    content={"message": "Default mock response"},
+                    status_code=options.default_status,
+                )
+
+            # 3. Lambda実行（Mock未定義 or None返却の場合）
             # 部分マッチングを試行（パラメータ付きパス）
             matched_route = self._find_matching_route(method, path)
 
@@ -269,12 +286,21 @@ class LambdaGateway:
         # 元のイベントを構築
         original_event = await self._build_lambda_event(request, path, matched_route)
 
-        # 入力値を上書き
+        # 入力値を上書き（正規化ステップ）
+        route_path = matched_route.get("path", "")
         for key, value in input_override.data.items():
-            if key in ["queryStringParameters", "pathParameters"]:
-                original_event[key].update(value)
+            if key in ["pathParameters", "queryStringParameters", "headers", "body"]:
+                # 明示指定されたイベントキーはそのまま適用
+                if isinstance(value, dict):
+                    original_event[key].update(value)
+                else:
+                    original_event[key] = value
+            elif f"{{{key}}}" in route_path:
+                # ルートパスパラメータ名と一致 → pathParameters へ
+                original_event["pathParameters"][key] = str(value)
             else:
-                original_event[key] = value
+                # その他 → queryStringParameters へ
+                original_event["queryStringParameters"][key] = str(value)
 
         # Lambda実行
         function_name = matched_route["function_name"]

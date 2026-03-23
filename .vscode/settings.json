@@ -1,3 +1,9 @@
 {
-    "python.analysis.typeCheckingMode": "off"
+    "python.analysis.typeCheckingMode": "off",
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /home/kocaj/sapimo && source \\.venv/bin/activate && python -m pytest tests/unit/test_cdk_parser\\.py tests/unit/test_image_info\\.py -v 2>&1 \\| tail -30$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
 }

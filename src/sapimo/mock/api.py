@@ -97,6 +97,21 @@ class MockOptions:
         self.mode = "mock"
         self.default_status = status
 
+    def set(self, mode_val, status: int = 200):
+        """旧API互換: options.set(mode.api) / options.set(mode.mock, status=400)"""
+        if isinstance(mode_val, str):
+            if mode_val in ("api", "ApiMode"):
+                self.set_api_mode()
+            elif mode_val in ("mock", "MockMode"):
+                self.set_mock_mode(status)
+        else:
+            # Enum互換: mode_val.name で判定
+            val = getattr(mode_val, "name", str(mode_val)).lower()
+            if val in ("api", "apimode"):
+                self.set_api_mode()
+            elif val in ("mock", "mockmode"):
+                self.set_mock_mode(status)
+
 
 # グローバルオプション
 options = MockOptions()
