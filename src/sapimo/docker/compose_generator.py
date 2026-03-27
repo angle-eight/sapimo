@@ -3,11 +3,11 @@
 SAM/CDKテンプレートからマルチコンテナ構成を自動生成
 """
 
-import json
+import shutil
 import yaml
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
+from typing import Dict, List, Any
+from dataclasses import dataclass
 
 from sapimo.parser.sam_parser import SamParser
 from sapimo.parser.cdk_parser import CdkCfParser
@@ -52,6 +52,33 @@ class DockerComposeGenerator:
         self.output_path = output_path or (template_path.parent / "docker-compose.yml")
         self.lambda_functions: List[LambdaFunction] = []
         self.aws_resources: Dict[str, Any] = {}
+
+    def _ensure_docker_templates(self) -> None:
+        """実行用Dockerテンプレートをapi_mock配下へ展開"""
+        templates_root = Path(__file__).parent / "templates"
+        target_root = self.output_path.parent / "docker"
+
+        if target_root.exists():
+            shutil.rmtree(target_root)
+
+        shutil.copytree(templates_root, target_root)
+        self._copy_runtime_sapimo_package(target_root)
+
+    def _copy_runtime_sapimo_package(self, target_root: Path) -> None:
+        """現在実行中のsapimoパッケージをテンプレート配下に複製"""
+        import sapimo
+
+        source_dir = Path(sapimo.__file__).resolve().parent
+        target_dir = target_root / "sapimo"
+
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+
+        shutil.copytree(
+            source_dir,
+            target_dir,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
 
     def parse_template(self) -> None:
         """SAM/CDKテンプレートを解析"""
@@ -134,12 +161,10 @@ class DockerComposeGenerator:
     def generate_compose_config(self) -> Dict[str, Any]:
         """Docker Compose設定を生成"""
         compose_config = {
-            "version": "3.8",
             "services": {},
             "networks": {
                 "sapimo-network": {
                     "driver": "bridge",
-                    "ipam": {"config": [{"subnet": "172.20.0.0/16"}]},
                 }
             },
             "volumes": {"sapimo-data": {}, "sapimo-logs": {}},
@@ -163,13 +188,16 @@ class DockerComposeGenerator:
         """Gateway サービス設定を生成"""
         return {
             "image": "sapimo-gateway:latest",
-            "build": {"context": ".", "dockerfile": "docker/gateway/Dockerfile"},
+            "build": {
+                "context": "..",
+                "dockerfile": "api_mock/docker/gateway/Dockerfile",
+            },
             "ports": ["${SAPIMO_PORT:-3000}:3000"],
             "environment": {
                 "SAPIMO_MODE": "gateway",
                 "LAMBDA_DISCOVERY_NETWORK": "sapimo-network",
             },
-            "volumes": ["./api_mock:/workspace/api_mock:ro", "./src:/workspace/src:ro"],
+            "volumes": ["./api_mock:/workspace/api_mock:ro"],
             "networks": ["sapimo-network"],
             "depends_on": ["sapimo-aws-mock"],
         }
@@ -187,7 +215,7 @@ class DockerComposeGenerator:
             services[service_name] = {
                 "image": f"sapimo-lambda-{safe_name}:latest",
                 "build": {
-                    "context": ".",
+                    "context": "..",
                     "dockerfile": "docker/lambda-runtime/Dockerfile",
                     "args": {
                         "PYTHON_VERSION": func.runtime,
@@ -235,7 +263,10 @@ class DockerComposeGenerator:
         """AWS Mock サービス設定を生成"""
         return {
             "image": "sapimo-aws-mock:latest",
-            "build": {"context": ".", "dockerfile": "docker/aws-mock/Dockerfile"},
+            "build": {
+                "context": "..",
+                "dockerfile": "api_mock/docker/aws_mock/Dockerfile",
+            },
             "ports": ["4566:4566"],  # LocalStack互換
             "environment": {
                 "SAPIMO_MODE": "aws-mock",
@@ -249,6 +280,9 @@ class DockerComposeGenerator:
     def generate_compose_file(self) -> Path:
         """Docker Compose ファイルを生成"""
         try:
+            # 実行用Dockerテンプレートを展開
+            self._ensure_docker_templates()
+
             # テンプレート解析
             self.parse_template()
 

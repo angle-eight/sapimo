@@ -56,6 +56,7 @@ def create_dockerfile():
         commands += lines
         commands.append(cmd or 'CMD ["app.lambda_handler"]')
 
+        docker_file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(docker_file_path, "w") as f:
             for line in commands:
                 f.write(line + "\n")
@@ -70,9 +71,9 @@ def create_dockerfile():
             temp_files.append(file_path)
 
     yield _create_dockerfile
-    docker_file_path.unlink()
+    docker_file_path.unlink(missing_ok=True)
     for file in temp_files:
-        file.unlink()
+        file.unlink(missing_ok=True)
 
 
 def test_read_env(get_target_obj, create_dockerfile):

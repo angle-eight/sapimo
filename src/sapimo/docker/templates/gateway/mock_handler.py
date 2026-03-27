@@ -1,4 +1,20 @@
 """
+Mock Handler
+設定ファイルベースの静的モックレスポンス処理
+"""
+
+import json
+from pathlib import Path
+from typing import Optional
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+from sapimo.utils import LogManager
+
+logger = LogManager.setup_logger(__file__)
+
+
+"""
 Mock Handler for Gateway
 api_mock/app.py の動的読み込みとMock処理
 """
@@ -27,18 +43,18 @@ class MockHandler:
         self.last_modified = None
         self._mock_module = None
 
-    def _find_route_match(self, method: str, path: str) -> Tuple[Optional[str], Dict[str, str]]:
+    def _find_route_match(
+        self, method: str, path: str
+    ) -> Tuple[Optional[str], Dict[str, str]]:
         """
         リクエストのメソッドとパスに一致するルートキーとパスパラメータを返す。
         完全一致を優先し、次にパターンマッチを試みる。
         Returns: (route_key or None, path_params dict)
         """
-        # 完全一致
         exact_key = f"{method.upper()}:{path}"
         if exact_key in self.mock_routes:
             return exact_key, {}
 
-        # パターンマッチ
         for route_key, route_info in self.mock_routes.items():
             parts = route_key.split(":", 1)
             if len(parts) != 2:
@@ -47,14 +63,15 @@ class MockHandler:
             if route_method != method.upper():
                 continue
 
-            # {param} を名前付きキャプチャグループに変換
             param_names = re.findall(r"\{([^}]+)\}", route_path)
             if not param_names:
                 continue
 
             regex_pattern = route_path
             for param_name in param_names:
-                regex_pattern = regex_pattern.replace(f"{{{param_name}}}", f"(?P<{param_name}>[^/]+)")
+                regex_pattern = regex_pattern.replace(
+                    f"{{{param_name}}}", f"(?P<{param_name}>[^/]+)"
+                )
             regex_pattern = f"^{regex_pattern}$"
 
             m = re.match(regex_pattern, path)
@@ -76,25 +93,20 @@ class MockHandler:
                 self.mock_routes.clear()
                 return False
 
-            # ファイルの変更チェック
             current_modified = self.app_py_path.stat().st_mtime
             if self.last_modified == current_modified and self.mock_routes:
                 return True
 
-            # モジュールを動的にロード
             spec = importlib.util.spec_from_file_location("app_mock", self.app_py_path)
             if spec and spec.loader:
                 self._mock_module = importlib.util.module_from_spec(spec)
 
-                # sys.modules に追加（既存のものがあれば更新）
                 if "app_mock" in sys.modules:
                     del sys.modules["app_mock"]
                 sys.modules["app_mock"] = self._mock_module
 
-                # モジュール実行
                 spec.loader.exec_module(self._mock_module)
 
-                # sapimo.mock.api からルート情報を取得
                 from sapimo.mock.api import api as mock_router
 
                 self.mock_routes = mock_router.route_info.copy()
@@ -128,10 +140,10 @@ class MockHandler:
         signature = route_info["signature"]
 
         try:
-            # パラメータを準備
-            params = await self._prepare_parameters(signature, path, request, path_params=path_params)
+            params = await self._prepare_parameters(
+                signature, path, request, path_params=path_params
+            )
 
-            # Mock関数を実行
             if asyncio.iscoroutinefunction(mock_func):
                 result = await mock_func(**params)
             else:
@@ -148,7 +160,10 @@ class MockHandler:
             )
 
     async def _prepare_parameters(
-        self, signature: inspect.Signature, path: str, request: Request,
+        self,
+        signature: inspect.Signature,
+        path: str,
+        request: Request,
         path_params: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Mock関数のパラメータを準備"""
@@ -161,7 +176,6 @@ class MockHandler:
             if param_name == "request":
                 params[param_name] = request
             elif param_name in path_params:
-                # 型変換の試行
                 value = path_params[param_name]
                 if param.annotation != inspect.Parameter.empty:
                     try:
@@ -184,20 +198,21 @@ class MockHandler:
         self, path: str, request: Request
     ) -> Dict[str, str]:
         """シンプルなパスパラメータ抽出"""
-        # TODO: より複雑なパスマッチングロジックが必要
-        # 現在は基本的な実装のみ
         return {}
 
     def start_file_watcher(self):
         """ファイル監視を開始"""
-        asyncio.create_task(self._watch_app_py())
+        try:
+            asyncio.get_running_loop().create_task(self._watch_app_py())
+        except RuntimeError:
+            logger.debug("No running event loop; skip watcher startup")
 
     async def _watch_app_py(self):
         """app.py の変更を監視"""
         while True:
             try:
                 self.reload_mock_definitions()
-                await asyncio.sleep(1)  # 1秒間隔でチェック
+                await asyncio.sleep(1)
             except Exception as e:
                 logger.error(f"File watcher error: {e}")
-                await asyncio.sleep(5)  # エラー時は5秒待機
+                await asyncio.sleep(5)

@@ -13,13 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 作業ディレクトリ
 WORKDIR /workspace
 
-# Python依存関係をインストール（レイヤーキャッシュ最適化）
-COPY requirements.txt /workspace/
+# Gateway専用の依存関係
+COPY api_mock/docker/gateway/requirements.txt /workspace/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Gateway アプリケーションファイルをコピー
-COPY docker/gateway/main.py /workspace/
-COPY docker/gateway/mock_handler.py /workspace/
+COPY api_mock/docker/gateway/main.py /workspace/
+COPY api_mock/docker/gateway/mock_handler.py /workspace/
+COPY api_mock/docker/gateway/openapi_example_resolver.py /workspace/
+COPY api_mock/docker/sapimo/ /workspace/sapimo/
 COPY api_mock/ /workspace/api_mock/
 
 # ログディレクトリ作成
@@ -28,7 +30,7 @@ RUN mkdir -p /workspace/logs /workspace/api_mock/log && \
 
 # Gateway専用の環境変数
 ENV SAPIMO_MODE=gateway \
-    PYTHONPATH=/workspace/src \
+    PYTHONPATH=/workspace \
     LAMBDA_DISCOVERY_NETWORK=sapimo-network \
     AWS_MOCK_ENDPOINT=http://sapimo-aws-mock:4566 \
     LOG_DIR=/workspace/logs

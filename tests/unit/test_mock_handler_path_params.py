@@ -12,7 +12,14 @@ import sys
 from pathlib import Path
 import pytest
 
-gateway_dir = Path(__file__).resolve().parents[2] / "docker" / "gateway"
+gateway_dir = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "sapimo"
+    / "docker"
+    / "templates"
+    / "gateway"
+)
 if str(gateway_dir) not in sys.path:
     sys.path.insert(0, str(gateway_dir))
 

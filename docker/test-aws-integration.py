@@ -89,9 +89,9 @@ def test_s3_operations():
 
     try:
         import boto3
-        from moto import mock_s3
+        from moto import mock_aws
 
-        with mock_s3():
+        with mock_aws():
             s3 = boto3.client("s3", region_name="us-east-1")
 
             # バケット作成
@@ -122,9 +122,9 @@ def test_dynamodb_operations():
 
     try:
         import boto3
-        from moto import mock_dynamodb
+        from moto import mock_aws
 
-        with mock_dynamodb():
+        with mock_aws():
             dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 
             # テーブル作成

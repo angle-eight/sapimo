@@ -79,3 +79,24 @@ sapimo/
 4. **停止**: `docker compose down`
 
 このアーキテクチャにより、各Lambda関数が完全に隔離された環境で実行され、実際のAWSと同様の動作を再現できます。
+
+## legacy_api からの移植整理
+
+旧 `sapimo.mock.initialize`（`legacy_api`）は非コンテナ版で以下を1プロセス内で担っていました。
+
+- FastAPI起動時のAWSモック開始/初期化（`mock.start()` / `init_data()`）
+- FastAPI停止時の同期/停止（`mock.sync()` / `mock.stop()`）
+- `MediatorRoute` 経由の Lambda 実行・Mock切替
+
+Docker版では責務を分離済みです。
+
+- AWSモックのライフサイクル管理: `sapimo-aws-mock` コンテナ
+- API ルーティングと Mock/Lambda 切替: `sapimo-gateway` コンテナ
+- Lambda 実行: 各 `lambda-*` コンテナ
+
+そのため `legacy_api` / `initialize.py` は削除し、互換対象をコンテナ版の実行経路に限定しました。
+
+### 非移植（意図的）
+
+- `legacy_api` の「import時に設定ファイル未検出でプロセス終了する挙動」は移植しない
+  - 理由: コンテナ運用で副作用が強く、`gateway`/`aws-mock` の独立性を壊すため

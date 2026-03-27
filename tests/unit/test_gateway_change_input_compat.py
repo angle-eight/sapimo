@@ -15,7 +15,14 @@ from sapimo.mock.api import InputOverride
 
 
 def _load_gateway_module():
-    gateway_dir = Path(__file__).resolve().parents[2] / "docker" / "gateway"
+    gateway_dir = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "sapimo"
+        / "docker"
+        / "templates"
+        / "gateway"
+    )
     if str(gateway_dir) not in sys.path:
         sys.path.insert(0, str(gateway_dir))
     module_path = gateway_dir / "main.py"

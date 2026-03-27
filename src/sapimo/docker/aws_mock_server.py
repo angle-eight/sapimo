@@ -7,6 +7,7 @@ moto ベースのAWSサービスモック専用サーバー
 import os
 import sys
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime
 import asyncio
@@ -36,10 +37,20 @@ class AWSMockServer:
 
     def _create_app(self) -> FastAPI:
         """FastAPIアプリケーション作成"""
+
+        @asynccontextmanager
+        async def lifespan(_: FastAPI):
+            await self.startup()
+            try:
+                yield
+            finally:
+                await self.shutdown()
+
         app = FastAPI(
             title="Sapimo AWS Mock Server",
             description="AWS Services Mock using moto",
             version="1.0.0",
+            lifespan=lifespan,
         )
 
         # CORS設定
@@ -50,10 +61,6 @@ class AWSMockServer:
             allow_methods=["*"],
             allow_headers=["*"],
         )
-
-        # イベントハンドラー
-        app.add_event_handler("startup", self.startup)
-        app.add_event_handler("shutdown", self.shutdown)
 
         # ヘルスチェックエンドポイント
         @app.get("/health")

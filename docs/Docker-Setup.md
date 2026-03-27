@@ -94,9 +94,9 @@ python -m sapimo --help
 ### コンテナが起動しない
 ```bash
 cd api_mock
-docker-compose logs sapimo-gateway
-docker-compose logs sapimo-aws-mock
-docker-compose up --build
+docker compose logs sapimo-gateway
+docker compose logs sapimo-aws-mock
+docker compose up --build
 ```
 
 ### Lambda関数が実行されない
