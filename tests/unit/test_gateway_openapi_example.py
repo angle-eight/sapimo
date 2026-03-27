@@ -13,8 +13,15 @@ import yaml
 import tempfile
 import os
 
-# openapi_example_resolver を直接インポートできるよう、gateway ディレクトリを追加
-gateway_dir = Path(__file__).resolve().parents[2] / "docker" / "gateway"
+# openapi_example_resolver を直接インポートできるよう、gateway テンプレートディレクトリを追加
+gateway_dir = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "sapimo"
+    / "docker"
+    / "templates"
+    / "gateway"
+)
 if str(gateway_dir) not in sys.path:
     sys.path.insert(0, str(gateway_dir))
 

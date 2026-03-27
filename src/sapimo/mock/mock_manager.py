@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation, Rounded
 
 import boto3
 from botocore.exceptions import ClientError
-from moto import mock_s3, mock_dynamodb, mock_sqs, mock_sns, mock_ses
+from moto import mock_aws
 
 from sapimo.constants import WORKING_DIR
 from sapimo.parser.config_parser import ConfigParser
@@ -55,7 +55,7 @@ class SnsMock(AwsMock):
     service_name = "sns"
 
     def __init__(self, config: dict):
-        self._mock = mock_sns()
+        self._mock = mock_aws()
         self._config = config
 
     def init_data(self):
@@ -71,7 +71,7 @@ class SesMock(AwsMock):
     service_name = "ses"
 
     def __init__(self, config: dict):
-        self._mock = mock_ses()
+        self._mock = mock_aws()
         self._config = config
 
     def init_data(self):
@@ -87,7 +87,7 @@ class SqsMock(AwsMock):
     service_name = "sqs"
 
     def __init__(self, config: dict):
-        self._mock = mock_sqs()
+        self._mock = mock_aws()
         self._config = config
         self._sqs_local_path = WORKING_DIR / "sqs"
         self._last_messages = {}
@@ -163,7 +163,7 @@ class S3Mock(AwsMock):
     service_name = "s3"
 
     def __init__(self, config: dict):
-        self._mock = mock_s3()
+        self._mock = mock_aws()
         self._config = config
         self._s3_local_path = WORKING_DIR / "s3"
         self._hashes = {}
@@ -257,7 +257,7 @@ class DynamoMock(AwsMock):
     service_name = "dynamodb"
 
     def __init__(self, config: dict):
-        self._mock = mock_dynamodb()
+        self._mock = mock_aws()
         self._config = config
         self._local_dynamo_path = WORKING_DIR / "dynamodb"
 

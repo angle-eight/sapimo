@@ -239,7 +239,7 @@ def start(host: str, port: int, build: bool, detach: bool):
 
     # コンテナ起動
     try:
-        cmd = ["docker-compose"]
+        cmd = ["docker", "compose"]
 
         if build:
             cmd.extend(["up", "--build"])
@@ -272,7 +272,8 @@ def status():
 
     try:
         cmd = [
-            "docker-compose",
+            "docker",
+            "compose",
             "exec",
             "sapimo-gateway",
             "python",
@@ -333,7 +334,8 @@ def clean(service, confirm):
     try:
         services_arg = ",".join(service) if service else ""
         cmd = [
-            "docker-compose",
+            "docker",
+            "compose",
             "exec",
             "sapimo-gateway",
             "python",

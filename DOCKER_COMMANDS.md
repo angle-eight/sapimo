@@ -83,10 +83,10 @@ development:
 ## 従来コマンドとの互換性
 
 ```bash
-docker-compose up
+docker compose up
 # 従来（ローカル）
 # (旧) sapimo run は廃止されました。代わりに Docker を使用してください。
 
 # Docker版（推奨）
-docker-compose up
+docker compose up
 ```

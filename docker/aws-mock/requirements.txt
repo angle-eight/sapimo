@@ -2,16 +2,12 @@
 # moto ベースのAWSサービスモック専用依存関係
 
 # AWS Mocking
-moto[all]>=4.0.0,<5.0.0
-boto3>=1.26.0,<2.0.0
+moto[all]>=5.0.0,<6
+boto3>=1.26.45,<2
 
 # HTTP Server
-fastapi>=0.88.0,<0.115.0
-uvicorn[standard]>=0.21.0,<0.25.0
+fastapi>=0.88.0,<0.115
+uvicorn[standard]>=0.21.1,<0.32
 
 # Data Serialization
-pyyaml>=6.0.0,<7.0.0
-orjson>=3.8.0,<4.0.0
-
-# LocalStack互換性
-localstack-ext>=2.0.0,<3.0.0
+pyyaml>=6.0
