@@ -1,20 +1,4 @@
 """
-Mock Handler
-設定ファイルベースの静的モックレスポンス処理
-"""
-
-import json
-from pathlib import Path
-from typing import Optional
-from fastapi import Request
-from fastapi.responses import JSONResponse
-
-from sapimo.utils import LogManager
-
-logger = LogManager.setup_logger(__file__)
-
-
-"""
 Mock Handler for Gateway
 api_mock/app.py の動的読み込みとMock処理
 """
@@ -193,12 +177,6 @@ class MockHandler:
                 params[param_name] = value
 
         return params
-
-    def _extract_simple_path_params(
-        self, path: str, request: Request
-    ) -> Dict[str, str]:
-        """シンプルなパスパラメータ抽出"""
-        return {}
 
     def start_file_watcher(self):
         """ファイル監視を開始"""

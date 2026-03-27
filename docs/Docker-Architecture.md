@@ -49,34 +49,30 @@ Client Request → Gateway (3000) → Lambda Container (8080)
 1. `api_mock/config.yaml` に関数定義を追加
 2. `lambda/{function-name}/` ディレクトリを作成
 3. `app.py` (Lambda関数) と `Dockerfile` を配置
-4. `docker-compose.yml` にコンテナ定義を追加
-5. `docker compose up --build` で起動
+4. `sapimo init` を実行して `api_mock/docker-compose.yml` を再生成
+5. `sapimo start` で起動
 
 ## ファイル構成
 
 ```
 sapimo/
-├── docker-compose.yml          # コンテナ編成
-├── docker/
-│   ├── gateway/
-│   │   ├── main.py            # Gateway実装
-│   │   └── Dockerfile         # Gateway用
-│   └── aws-mock/
-│       └── Dockerfile         # AWS Mock用
 ├── lambda/
 │   └── {function-name}/
 │       ├── app.py            # Lambda関数
 │       └── Dockerfile        # Lambda用
 └── api_mock/
-    └── config.yaml           # 関数とルーティング定義
+  ├── config.yaml           # 関数とルーティング定義
+  ├── docker-compose.yml    # initで生成されるコンテナ編成
+  └── docker/               # initで展開される実行テンプレート
 ```
 
 ## 開発フロー
 
-1. **起動**: `docker compose up -d`
-2. **テスト**: `curl http://localhost:3000/{path}`
-3. **ログ確認**: `docker compose logs {service-name}`
-4. **停止**: `docker compose down`
+1. **反映**: `sapimo init`（テンプレート/compose再生成）
+2. **起動**: `sapimo start`
+3. **テスト**: `curl http://localhost:3000/{path}`
+4. **ログ確認**: `cd api_mock && docker compose logs {service-name}`
+5. **停止**: `cd api_mock && docker compose down`
 
 このアーキテクチャにより、各Lambda関数が完全に隔離された環境で実行され、実際のAWSと同様の動作を再現できます。
 
