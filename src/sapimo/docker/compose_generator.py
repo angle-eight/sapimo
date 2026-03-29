@@ -73,6 +73,26 @@ class DockerComposeGenerator:
 
         return self._to_compose_relative_path(code_path)
 
+    def _resolve_lambda_python_tag(self, runtime: str) -> str:
+        """Runtime文字列から Lambda base image 用のPythonタグを返す。"""
+        normalized = (runtime or "").strip().lower()
+        if normalized.startswith("python"):
+            normalized = normalized[len("python") :]
+
+        if normalized.count(".") == 1:
+            major, minor = normalized.split(".", 1)
+            if major.isdigit() and minor.isdigit():
+                return f"{major}.{minor}"
+
+        raise ValueError(f"Unsupported Lambda runtime: {runtime}")
+
+    def _resolve_layer_host_path(self, layer_path: str) -> Path:
+        """Layerパスをプロジェクトルート基準の絶対パスに変換。"""
+        resolved = Path(layer_path)
+        if not resolved.is_absolute():
+            resolved = self.project_root / resolved
+        return resolved
+
     def _ensure_docker_templates(self) -> None:
         """実行用Dockerテンプレートをapi_mock配下へ展開"""
         templates_root = Path(__file__).parent / "templates"
@@ -105,19 +125,29 @@ class DockerComposeGenerator:
         logger.info(f"Parsing template: {self.template_path}")
 
         try:
-            # CDK出力か確認
-            if self.template_path.name.endswith(".json") or "cdk.out" in str(
-                self.template_path
-            ):
-                parser = CdkCfParser(self.template_path)
+            # 毎回再生成時にリセット
+            self.lambda_functions = []
+            self.aws_resources = {}
+
+            if self.template_path.name in {"config.yaml", "config.yml"}:
+                with open(self.template_path) as f:
+                    config = yaml.safe_load(f) or {}
             else:
-                parser = SamParser(self.template_path)
+                # CDK出力か確認
+                if self.template_path.name.endswith(".json") or "cdk.out" in str(
+                    self.template_path
+                ):
+                    parser = CdkCfParser(self.template_path)
+                else:
+                    parser = SamParser(self.template_path)
+
+                config = self._create_intermediate_config(parser)
 
             # Lambda関数を抽出
-            self._extract_lambda_functions(parser)
+            self._extract_lambda_functions(config)
 
             # AWSリソースを抽出
-            self._extract_aws_resources(parser)
+            self._extract_aws_resources(config)
 
             logger.info(f"Found {len(self.lambda_functions)} Lambda functions")
 
@@ -125,58 +155,45 @@ class DockerComposeGenerator:
             logger.error(f"Failed to parse template: {e}")
             raise
 
-    def _extract_lambda_functions(self, parser) -> None:
-        """Lambda関数を抽出"""
-        # parserから設定を取得（既存のConfigParserベース）
-        if hasattr(parser, "create_config_file"):
-            # 一時的なconfig生成
-            temp_config = Path("/tmp/temp_config.yaml")
-            parser.create_config_file(temp_config, overwrite=True)
-
-            # 生成されたconfigからLambda情報を読み取り
+    def _create_intermediate_config(self, parser) -> Dict[str, Any]:
+        """SAM/CDKパーサーから共通config形式を生成して返す。"""
+        temp_config = Path("/tmp/temp_config.yaml")
+        parser.create_config_file(temp_config, overwrite=True)
+        try:
             with open(temp_config) as f:
-                config = yaml.safe_load(f)
-
-            # pathsからLambda関数を抽出
-            for path, methods in config.get("paths", {}).items():
-                for method, props in methods.items():
-                    func_props = props.get("Properties", {})
-
-                    # 関数名を生成
-                    func_name = f"{path.replace('/', '_').replace('{', '').replace('}', '')}_{method}"
-                    if func_name.startswith("_"):
-                        func_name = func_name[1:]
-
-                    lambda_func = LambdaFunction(
-                        name=func_name,
-                        handler=func_props.get("Handler", "app.lambda_handler"),
-                        runtime=func_props.get("Runtime", "python3.9"),
-                        code_uri=func_props.get("CodeUri", "./"),
-                        environment=func_props.get("Environment", {}).get(
-                            "Variables", {}
-                        ),
-                        layers=func_props.get("Layers", []),
-                        timeout=func_props.get("Timeout", 30),
-                        memory_size=func_props.get("MemorySize", 128),
-                    )
-
-                    self.lambda_functions.append(lambda_func)
-
-            # 一時ファイル削除
+                return yaml.safe_load(f) or {}
+        finally:
             temp_config.unlink(missing_ok=True)
 
-    def _extract_aws_resources(self, parser) -> None:
-        """AWSリソースを抽出"""
-        # 既存のconfigからAWSリソースを読み取り
-        temp_config = Path("/tmp/temp_config.yaml")
-        if temp_config.exists():
-            with open(temp_config) as f:
-                config = yaml.safe_load(f)
+    def _extract_lambda_functions(self, config: Dict[str, Any]) -> None:
+        """config辞書からLambda関数を抽出"""
+        for path, methods in config.get("paths", {}).items():
+            for method, props in methods.items():
+                func_props = props.get("Properties", {})
 
-            # S3, DynamoDB等のリソース
-            for service in ["s3", "dynamodb", "sqs", "sns"]:
-                if service in config:
-                    self.aws_resources[service] = config[service]
+                # 関数名を生成
+                func_name = f"{path.replace('/', '_').replace('{', '').replace('}', '')}_{method}"
+                if func_name.startswith("_"):
+                    func_name = func_name[1:]
+
+                lambda_func = LambdaFunction(
+                    name=func_name,
+                    handler=func_props.get("Handler", "app.lambda_handler"),
+                    runtime=func_props.get("Runtime", "python3.9"),
+                    code_uri=func_props.get("CodeUri", "./"),
+                    environment=func_props.get("Environment", {}).get("Variables", {}),
+                    layers=func_props.get("Layers", []),
+                    timeout=func_props.get("Timeout", 30),
+                    memory_size=func_props.get("MemorySize", 128),
+                )
+
+                self.lambda_functions.append(lambda_func)
+
+    def _extract_aws_resources(self, config: Dict[str, Any]) -> None:
+        """config辞書からAWSリソースを抽出"""
+        for service in ["s3", "dynamodb", "sqs", "sns", "ses"]:
+            if service in config:
+                self.aws_resources[service] = config[service]
 
     def generate_compose_config(self) -> Dict[str, Any]:
         """Docker Compose設定を生成"""
@@ -231,30 +248,94 @@ class DockerComposeGenerator:
             # サービス名を生成（関数名をサニタイズ）
             safe_name = self._sanitize_service_name(func.name)
             service_name = f"lambda-{safe_name}"
+            compose_code_path = self._resolve_code_uri_host_path(func.code_uri)
+            runtime_tag = self._resolve_lambda_python_tag(func.runtime)
+
+            resolved_code_path = Path(func.code_uri)
+            if not resolved_code_path.is_absolute():
+                resolved_code_path = self.project_root / resolved_code_path
+            if not resolved_code_path.exists():
+                logger.warning(
+                    "CodeUri path not found for '%s': %s",
+                    func.name,
+                    resolved_code_path,
+                )
+
+            layer_volumes: List[str] = []
+            pythonpath_entries: List[str] = ["/var/task"]
+            for idx, layer in enumerate(func.layers):
+                resolved_layer_path = self._resolve_layer_host_path(layer)
+                if not resolved_layer_path.exists():
+                    logger.warning(
+                        "Layer path not found for '%s': %s",
+                        func.name,
+                        resolved_layer_path,
+                    )
+                    continue
+
+                compose_layer_path = self._to_compose_relative_path(resolved_layer_path)
+                container_layer_base = f"/opt/sapimo_layers/{idx}"
+                layer_volumes.append(f"{compose_layer_path}:{container_layer_base}:ro")
+                # layer直下にモジュールがあるケースと、python/配下にあるケースの両方を解決
+                pythonpath_entries.append(container_layer_base)
+                pythonpath_entries.append(f"{container_layer_base}/python")
+
+            user_pythonpath = func.environment.get("PYTHONPATH")
+            if user_pythonpath:
+                pythonpath_entries.extend(
+                    [entry for entry in user_pythonpath.split(":") if entry]
+                )
+
+            deduped_pythonpath: List[str] = []
+            for entry in pythonpath_entries:
+                if entry not in deduped_pythonpath:
+                    deduped_pythonpath.append(entry)
+
+            lambda_env = {
+                **func.environment,
+                "PYTHONPATH": ":".join(deduped_pythonpath),
+            }
+
+            configured_region = (
+                lambda_env.get("AWS_DEFAULT_REGION")
+                or lambda_env.get("AWS_REGION")
+                or "us-east-1"
+            )
+            if not str(configured_region).strip():
+                configured_region = "us-east-1"
+
+            lambda_env["AWS_REGION"] = configured_region
+            lambda_env["AWS_DEFAULT_REGION"] = configured_region
+            lambda_env.setdefault("AWS_MOCK_ENDPOINT", "http://sapimo-aws-mock:4566")
+            lambda_env.setdefault("AWS_ENDPOINT_URL", lambda_env["AWS_MOCK_ENDPOINT"])
+            lambda_env.setdefault("AWS_ACCESS_KEY_ID", "testing")
+            lambda_env.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
+            lambda_env.setdefault("AWS_SESSION_TOKEN", "testing")
+            lambda_env.setdefault("AWS_EC2_METADATA_DISABLED", "true")
 
             services[service_name] = {
                 "image": f"sapimo-lambda-{safe_name}:latest",
                 "build": {
                     "context": "..",
-                    "dockerfile": "docker/lambda-runtime/Dockerfile",
+                    "dockerfile": "api_mock/docker/lambda_runtime/Dockerfile",
                     "args": {
-                        "PYTHON_VERSION": func.runtime,
-                        "FUNCTION_NAME": func.name,
+                        "PYTHON_VERSION": runtime_tag,
                     },
                 },
+                "command": func.handler,
                 "environment": {
                     "SAPIMO_MODE": "lambda-runtime",
                     "LAMBDA_FUNCTION_NAME": func.name,
                     "LAMBDA_HANDLER": func.handler,
                     "LAMBDA_RUNTIME": func.runtime,
-                    "AWS_LAMBDA_FUNCTION_VERSION": "$LATEST",
-                    "AWS_REGION": "us-east-1",
-                    **func.environment,
+                    "AWS_LAMBDA_FUNCTION_VERSION": "$$LATEST",
+                    **lambda_env,
                 },
                 "volumes": [
-                    f"{self._resolve_code_uri_host_path(func.code_uri)}:/var/task:rw",  # コード即時反映
+                    f"{compose_code_path}:/var/task:rw",  # コード即時反映
                     f"{self._to_compose_relative_path(self.project_root / 'data' / f'lambda-{safe_name}')}:/tmp/lambda:rw",  # 一時ファイル
                     ".:/workspace/api_mock:ro",  # 設定ファイル
+                    *layer_volumes,
                 ],
                 "networks": ["sapimo-network"],
                 "depends_on": ["sapimo-aws-mock"],

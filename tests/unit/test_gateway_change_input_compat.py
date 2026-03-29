@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from sapimo.mock.api import InputOverride
 
 
@@ -258,3 +259,41 @@ async def test_tc_ovr_004_body_override_works(monkeypatch):
     await gateway._invoke_lambda_with_override(override, "POST", "hello", request)
 
     assert sent_events[0]["body"] == '{"key":"value"}'
+
+
+@pytest.mark.anyio
+async def test_invoke_lambda_non_200_returns_http_502(monkeypatch):
+    gateway = _create_gateway(monkeypatch)
+    route_info = {"function_name": "simple-trades_post", "path": "/simple-trades"}
+
+    async def fake_build_event(request, path, ri):
+        return _base_event()
+
+    monkeypatch.setattr(gateway, "_build_lambda_event", fake_build_event)
+    gateway.lambda_containers["simple-trades_post"] = "lambda-simple-trades-post"
+
+    from unittest.mock import MagicMock
+    import httpx
+    from fastapi import Request as FastAPIRequest
+
+    async def fake_http_post(self_client, url, json, timeout):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 502
+        mock_resp.text = '{"errorMessage":"import failed"}'
+        return mock_resp
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_http_post)
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/simple-trades",
+        "query_string": b"",
+        "headers": [],
+    }
+    request = FastAPIRequest(scope)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await gateway._invoke_lambda(route_info, request, "simple-trades")
+
+    assert exc_info.value.status_code == 502
