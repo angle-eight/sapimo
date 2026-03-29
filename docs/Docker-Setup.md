@@ -1,24 +1,29 @@
 # Sapimo Docker セットアップガイド
 
-この文書は、**Docker がインストール済みの環境で `sapimo` を使い始めるユーザー向け**の手順です。
+この文書は Docker 利用環境で `sapimo` を単一コンテナで使う手順です。
 
 ---
 
-## 1. 通常利用（推奨）
+## 1. 前提
 
-### 前提
-- Docker / Docker Compose が利用可能
-- AWS SAM の `template.yaml` または CDK の CloudFormation 出力がある
-- Python 3.12+
+1. Docker / Docker Compose が利用可能
+2. AWS SAM の `template.yaml` または CDK の CloudFormation 出力がある
+3. Python 3.12+
 
-### インストール
+---
+
+## 2. インストール
+
 ```bash
 pip install sapimo
 ```
 
-### 利用開始
+---
+
+## 3. 利用開始
+
 ```bash
-# template.yaml から api_mock/config.yaml と api_mock/docker-compose.yml を生成
+# template.yaml から api_mock/config.yaml と単一コンテナ用 compose を生成
 sapimo init
 
 # api_mock/app.py を自動生成（必要な場合のみ）
@@ -30,14 +35,11 @@ sapimo start
 
 起動後は `http://localhost:8000` にアクセスします。
 
-> 注意: `sapimo` 本体を更新した場合（`pip install -U sapimo` や `pip install -e .` 後）は、
-> `api_mock/docker/` のテンプレート同期のため **`sapimo init` の再実行** が必要です。
+> 注意: sapimo を更新した後は、`api_mock/docker/` テンプレート更新のため `sapimo init` を再実行してください。
 
 ---
 
-## 2. リポジトリ開発者向け（補足）
-
-`pip install` ではなくリポジトリを直接触る場合は次の手順です。
+## 4. リポジトリ開発者向け
 
 ```bash
 git clone <repository>
@@ -49,7 +51,7 @@ python -m sapimo start
 
 ---
 
-## 3. 設定ファイル例
+## 5. 設定ファイル例
 
 ### `api_mock/config.yaml`
 ```yaml
@@ -83,7 +85,7 @@ dynamodb:
 
 ---
 
-## 4. トラブルシューティング
+## 6. トラブルシューティング
 
 ### `sapimo` コマンドが見つからない
 ```bash
@@ -91,17 +93,17 @@ python -m sapimo --help
 ```
 
 ### `sapimo init` で設定生成できない
-- `template.yaml` または `cdk.out/*.template.json` が存在するか確認
-- 生成先は `api_mock/` 配下
+1. `template.yaml` または `cdk.out/*.template.json` の存在を確認
+2. 生成先は `api_mock/` 配下
 
 ### コンテナが起動しない
 ```bash
 cd api_mock
-docker compose logs sapimo-gateway
-docker compose logs sapimo-aws-mock
+docker compose logs sapimo
 docker compose up --build
 ```
 
 ### Lambda関数が実行されない
-- `api_mock/config.yaml` の `Properties.CodeUri` と `Properties.Handler` を確認
-- `api_mock/docker-compose.yml` が存在するか確認（`sapimo init` で生成）
+1. `api_mock/config.yaml` の `Properties.CodeUri` と `Properties.Handler` を確認
+2. `api_mock/docker-compose.yml` が存在するか確認（`sapimo init` で生成）
+3. レイヤー利用時は `Properties.Layers` のパス実在を確認
