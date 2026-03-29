@@ -36,6 +36,14 @@ Client Request
 3. 旧実装の改善点は維持する
 4. 危険なグローバル環境汚染は、呼び出し単位の保存/復元で抑制する
 
+## 実行時の制約
+
+1. Sapimo は他リポジトリから `pip install` して使われる前提
+2. `workspace/src` の存在を前提にしない
+3. `api_mock/docker/` は必須 runtime 資産であり、不在は異常
+4. 異常はフォールバックせず fail-fast で停止する
+5. Compose project 名は CLI 側で一意化し、別リポジトリと衝突させない
+
 ## 保持している改善仕様
 
 1. JWT Authorizer passthrough（検証なし、claims 注入）
