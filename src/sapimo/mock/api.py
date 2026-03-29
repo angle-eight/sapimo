@@ -11,7 +11,16 @@ from functools import wraps
 class InputOverride:
     """入力値すり替え用のマーカークラス"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: Dict[str, Any] | None = None, **kwargs: Any):
+        # 旧実装互換: InputOverride(path=..., body=...) のキーワード指定を許容
+        if data is None:
+            data = {}
+        elif not isinstance(data, dict):
+            raise TypeError("data must be a dict")
+
+        if kwargs:
+            data = {**data, **kwargs}
+
         self.data = data
 
 
