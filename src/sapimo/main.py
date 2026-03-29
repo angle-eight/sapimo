@@ -4,12 +4,20 @@ import click
 
 import os
 import subprocess
+import hashlib
 from sapimo.parser.sam_parser import SamParser
 from sapimo.parser.cdk_parser import CdkCfParser
 from sapimo.utils import create_config_template, LogManager
 from sapimo.constants import CONFIG_FILE, WORKING_DIR
 
 logger = LogManager.setup_logger(__file__)
+
+
+def _compose_project_name() -> str:
+    base_dir = WORKING_DIR.resolve().parent
+    digest = hashlib.sha1(str(base_dir).encode("utf-8")).hexdigest()[:8]
+    normalized = base_dir.name.replace("_", "-")
+    return f"sapimo-{normalized}-{digest}"
 
 
 @click.group()
@@ -79,10 +87,12 @@ def create_config(template: Path, parse_class: Callable, overwrite: bool):
             parser = parse_class(template)
             parser.create_config_file(CONFIG_FILE, overwrite)
 
-            # Docker Compose自動生成
-            from sapimo.docker.compose_generator import DockerComposeGenerator
+            # 単一コンテナ用 Docker Compose 自動生成
+            from sapimo.docker.single_compose_generator import (
+                SingleContainerComposeGenerator,
+            )
 
-            compose_gen = DockerComposeGenerator(CONFIG_FILE)
+            compose_gen = SingleContainerComposeGenerator(CONFIG_FILE)
             compose_gen.generate_compose_file()
             click.echo(f"Generated docker-compose.yml in {WORKING_DIR}")
 
@@ -239,12 +249,17 @@ def start(host: str, port: int, build: bool, detach: bool):
 
     # コンテナ起動
     try:
-        cmd = ["docker", "compose"]
+        cmd = [
+            "docker",
+            "compose",
+            "-p",
+            _compose_project_name(),
+            "up",
+            "--remove-orphans",
+        ]
 
         if build:
-            cmd.extend(["up", "--build"])
-        else:
-            cmd.append("up")
+            cmd.append("--build")
 
         if detach:
             cmd.append("-d")
@@ -274,15 +289,23 @@ def status():
         cmd = [
             "docker",
             "compose",
+            "-p",
+            _compose_project_name(),
             "exec",
-            "sapimo-gateway",
+            "sapimo",
             "python",
             "-c",
             """
 import sys
 import json
 from pathlib import Path
-sys.path.append('/workspace/src')
+runtime_root = Path('/workspace/api_mock/docker')
+if not runtime_root.exists():
+    raise RuntimeError(
+        "Missing runtime assets: /workspace/api_mock/docker. "
+        "Run 'sapimo init' to regenerate docker assets."
+    )
+sys.path.insert(0, str(runtime_root))
 
 try:
     from sapimo.docker.mock_manager import DockerMockManager
@@ -336,13 +359,22 @@ def clean(service, confirm):
         cmd = [
             "docker",
             "compose",
+            "-p",
+            _compose_project_name(),
             "exec",
-            "sapimo-gateway",
+            "sapimo",
             "python",
             "-c",
             f"""
 import sys
-sys.path.append('/workspace/src')
+from pathlib import Path
+runtime_root = Path('/workspace/api_mock/docker')
+if not runtime_root.exists():
+    raise RuntimeError(
+        "Missing runtime assets: /workspace/api_mock/docker. "
+        "Run 'sapimo init' to regenerate docker assets."
+    )
+sys.path.insert(0, str(runtime_root))
 try:
     from sapimo.docker.mock_manager import DockerMockManager
     from sapimo.constants import CONFIG_FILE

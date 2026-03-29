@@ -16,6 +16,8 @@ import yaml
 
 from mock_handler import MockHandler
 from sapimo.mock.api import InputOverride, options
+from sapimo.mock.mock_manager import MockManager
+from sapimo.docker.local_lambda_runner import LocalLambdaRunner
 from sapimo.utils import LogManager
 
 logger = LogManager.setup_logger(__file__)
@@ -25,6 +27,12 @@ class LambdaGateway:
     """Lambda コンテナとの連携ゲートウェイ"""
 
     def __init__(self):
+        self.single_container_mode = os.getenv("SAPIMO_SINGLE_CONTAINER", "0") == "1"
+        self.project_root = Path("/workspace")
+        self.config_path = self.project_root / "api_mock" / "config.yaml"
+        self.mock_manager: MockManager | None = None
+        self.local_lambda_runner: LocalLambdaRunner | None = None
+
         self.app = FastAPI(
             title="Sapimo Lambda Gateway",
             description="FastAPI Gateway for Lambda container orchestration",
@@ -38,8 +46,38 @@ class LambdaGateway:
         self._load_configuration()
         self._setup_routes()
 
+        if self.single_container_mode:
+            self.local_lambda_runner = LocalLambdaRunner(self.project_root)
+            self._initialize_local_mock_manager()
+            self._register_lifecycle_handlers()
+
         self.mock_handler.reload_mock_definitions()
         self.mock_handler.start_file_watcher()
+
+    def _initialize_local_mock_manager(self):
+        if not self.config_path.exists():
+            logger.warning("config.yaml not found for local mock manager")
+            return
+
+        try:
+            self.mock_manager = MockManager(config_file=self.config_path)
+            self.mock_manager.start()
+            self.mock_manager.init_data()
+            logger.info("Initialized in-process AWS mocks for single-container mode")
+        except Exception:
+            logger.exception("Failed to initialize in-process AWS mocks")
+            raise
+
+    def _register_lifecycle_handlers(self):
+        @self.app.on_event("shutdown")
+        async def _shutdown_single_container_mocks():
+            if not self.mock_manager:
+                return
+            try:
+                self.mock_manager.sync()
+                self.mock_manager.stop()
+            except Exception:
+                logger.exception("Failed to shutdown in-process AWS mocks")
 
     def _setup_middleware(self):
         """ミドルウェアの設定"""
@@ -81,6 +119,11 @@ class LambdaGateway:
                         "function_name": func_name,
                         "handler": handler,
                         "code_uri": code_uri,
+                        "environment": properties.get("Environment", {}).get(
+                            "Variables", {}
+                        ),
+                        "layers": properties.get("Layers", []),
+                        "runtime": properties.get("Runtime", "python3.9"),
                         "method": method.upper(),
                         "path": path,
                         "auth_type": auth_type,
@@ -222,6 +265,17 @@ class LambdaGateway:
         try:
             event = await self._build_lambda_event(request, path, route_info)
 
+            if self.single_container_mode:
+                if not self.local_lambda_runner:
+                    raise RuntimeError("Local lambda runner is not initialized")
+                lambda_result = await self.local_lambda_runner.execute(
+                    route_info, event
+                )
+                return JSONResponse(
+                    content=lambda_result.get("body", lambda_result),
+                    status_code=lambda_result.get("statusCode", 200),
+                )
+
             lambda_url = f"http://{container_name}:8080/2015-03-31/functions/function/invocations"
 
             async with httpx.AsyncClient() as client:
@@ -273,6 +327,12 @@ class LambdaGateway:
                 path,
             )
             raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            if self.single_container_mode and self.mock_manager:
+                try:
+                    self.mock_manager.sync()
+                except Exception:
+                    logger.exception("Failed to sync in-process mock data")
 
     async def _invoke_lambda_with_override(
         self, input_override: InputOverride, method: str, path: str, request: Request
@@ -303,6 +363,17 @@ class LambdaGateway:
         container_name = self.lambda_containers[function_name]
 
         try:
+            if self.single_container_mode:
+                if not self.local_lambda_runner:
+                    raise RuntimeError("Local lambda runner is not initialized")
+                lambda_result = await self.local_lambda_runner.execute(
+                    matched_route, original_event
+                )
+                return JSONResponse(
+                    content=lambda_result.get("body", lambda_result),
+                    status_code=lambda_result.get("statusCode", 200),
+                )
+
             lambda_url = f"http://{container_name}:8080/2015-03-31/functions/function/invocations"
 
             async with httpx.AsyncClient() as client:
@@ -356,6 +427,12 @@ class LambdaGateway:
                 path,
             )
             raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            if self.single_container_mode and self.mock_manager:
+                try:
+                    self.mock_manager.sync()
+                except Exception:
+                    logger.exception("Failed to sync in-process mock data")
 
     async def _build_lambda_event(self, request: Request, path: str, route_info: dict):
         """AWS Lambda event オブジェクトを構築"""

@@ -2,97 +2,54 @@
 
 ## 現在のコンテナ構成
 
-Sapimoは以下の3つのコンテナで構成されています：
+Sapimo は単一コンテナ (`sapimo`) で動作します。
 
-### 1. Gateway Container (`sapimo-gateway`)
-- **役割**: APIルーティングとLambdaコンテナ調整
-- **ポート**: 8000
-- **技術**: FastAPI + uvicorn
+### Single Container (`sapimo`)
+- **役割**: API ルーティング / Mock 判定 / Lambda 実行 / AWS モック管理
+- **ポート**: 8000 (host) → 3000 (container)
+- **技術**: FastAPI + uvicorn + moto
 - **機能**:
-  - HTTP リクエストを受信
-  - Lambda コンテナへのルーティング
-  - AWS Lambda Runtime API 経由での通信
-  - API Gateway v2 形式のイベント構築
+  - HTTP リクエスト受付とルーティング
+  - `api_mock/app.py` の動的Mock定義読み込み
+  - Lambda ハンドラのローカル実行
+  - `mock_aws` による S3 / DynamoDB / SQS / SNS / SES 模擬
+  - データ同期 (`data/`)
 
-### 2. AWS Mock Container (`sapimo-aws-mock`)
-- **役割**: AWS サービスのローカル模擬
-- **ポート**: 4566 (LocalStack互換)
-- **技術**: moto + FastAPI
-- **機能**:
-  - S3, DynamoDB, SQS, SNS, SES の模擬
-  - データの永続化 (`./data` ボリューム)
-  - Lambda関数からのAWS SDK呼び出し処理
-
-### 3. Lambda Runtime Containers (`lambda-{function-name}`)
-- **役割**: Lambda関数の実行環境
-- **ポート**: 8080 (内部通信用)
-- **技術**: AWS Lambda Python Runtime
-- **機能**:
-  - 独立したPython実行環境
-  - AWS Lambda Runtime API の提供
-  - 環境変数とレイヤーの管理
-
-## コンテナ間通信
+## 実行フロー
 
 ```
-Client Request → Gateway (8000) → Lambda Container (8080)
-                     ↓
-                 AWS Mock (4566) ← Lambda Function (boto3)
+Client Request
+  -> Unified Router (FastAPI)
+    -> Mock 定義あり: Mockを返却 or InputOverride で Lambda 実行
+    -> Mock 定義なし: Lambda 実行
+      -> LocalLambdaRunner (同一プロセス)
+        -> CodeUri + Layers を一時 sys.path に適用
+        -> 呼び出し単位で環境変数を保存・適用・復元
+        -> Lambda handler(event, context) を実行
+  -> 必要時に mock データを同期
 ```
 
-- **ネットワーク**: `sapimo-network` (172.20.0.0/16)
-- **サービス探索**: Dockerの内部DNS
-- **プロトコル**: HTTP/REST (全て)
+## 設計方針
 
-## Lambda関数の追加方法
+1. moto の利点を活かすため、AWS モックは同一プロセスで管理する
+2. コンテナ分離由来の設定複雑化を回避する
+3. 旧実装の改善点は維持する
+4. 危険なグローバル環境汚染は、呼び出し単位の保存/復元で抑制する
 
-1. `api_mock/config.yaml` に関数定義を追加
-2. `lambda/{function-name}/` ディレクトリを作成
-3. `app.py` (Lambda関数) と `Dockerfile` を配置
-4. `sapimo init` を実行して `api_mock/docker-compose.yml` を再生成
-5. `sapimo start` で起動
+## 保持している改善仕様
 
-## ファイル構成
+1. JWT Authorizer passthrough（検証なし、claims 注入）
+2. AWS_IAM ダミー authorizer 注入
+3. InputOverride の互換挙動（辞書形式 + キーワード形式）
+4. Path parameter 抽出
+5. Options mode 切替
+6. OpenAPI example 返却
+7. HTTPException の再raise（502/503 を 500 で潰さない）
 
-```
-sapimo/
-├── lambda/
-│   └── {function-name}/
-│       ├── app.py            # Lambda関数
-│       └── Dockerfile        # Lambda用
-└── api_mock/
-  ├── config.yaml           # 関数とルーティング定義
-  ├── docker-compose.yml    # initで生成されるコンテナ編成
-  └── docker/               # initで展開される実行テンプレート
-```
+## 関連ファイル
 
-## 開発フロー
-
-1. **反映**: `sapimo init`（テンプレート/compose再生成）
-2. **起動**: `sapimo start`
-3. **テスト**: `curl http://localhost:8000/{path}`
-4. **ログ確認**: `cd api_mock && docker compose logs {service-name}`
-5. **停止**: `cd api_mock && docker compose down`
-
-このアーキテクチャにより、各Lambda関数が完全に隔離された環境で実行され、実際のAWSと同様の動作を再現できます。
-
-## legacy_api からの移植整理
-
-旧 `sapimo.mock.initialize`（`legacy_api`）は非コンテナ版で以下を1プロセス内で担っていました。
-
-- FastAPI起動時のAWSモック開始/初期化（`mock.start()` / `init_data()`）
-- FastAPI停止時の同期/停止（`mock.sync()` / `mock.stop()`）
-- `MediatorRoute` 経由の Lambda 実行・Mock切替
-
-Docker版では責務を分離済みです。
-
-- AWSモックのライフサイクル管理: `sapimo-aws-mock` コンテナ
-- API ルーティングと Mock/Lambda 切替: `sapimo-gateway` コンテナ
-- Lambda 実行: 各 `lambda-*` コンテナ
-
-そのため `legacy_api` / `initialize.py` は削除し、互換対象をコンテナ版の実行経路に限定しました。
-
-### 非移植（意図的）
-
-- `legacy_api` の「import時に設定ファイル未検出でプロセス終了する挙動」は移植しない
-  - 理由: コンテナ運用で副作用が強く、`gateway`/`aws-mock` の独立性を壊すため
+1. `src/sapimo/docker/templates/gateway/main.py`
+2. `src/sapimo/docker/local_lambda_runner.py`
+3. `src/sapimo/mock/mock_manager.py`
+4. `src/sapimo/mock/api.py`
+5. `src/sapimo/docker/single_compose_generator.py`
