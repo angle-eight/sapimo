@@ -209,7 +209,7 @@ def generate_mock_api(filepath: Path):
 @click.option(
     "--port",
     type=int,
-    default=3000,
+    default=8000,
     help="Bind socket to this port.",
     show_default=True,
 )

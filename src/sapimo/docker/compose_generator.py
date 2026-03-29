@@ -4,6 +4,7 @@ SAM/CDKテンプレートからマルチコンテナ構成を自動生成
 """
 
 import shutil
+import os
 import yaml
 from pathlib import Path
 from typing import Dict, List, Any
@@ -50,8 +51,27 @@ class DockerComposeGenerator:
         self.template_path = template_path
         # api_mockディレクトリ内にdocker-compose.ymlを配置
         self.output_path = output_path or (template_path.parent / "docker-compose.yml")
+        self.compose_dir = self.output_path.parent
+        self.project_root = self.compose_dir.parent
         self.lambda_functions: List[LambdaFunction] = []
         self.aws_resources: Dict[str, Any] = {}
+
+    def _to_compose_relative_path(self, host_path: Path) -> str:
+        """composeファイル配置場所からの相対パスを返す"""
+        rel_path = Path(os.path.relpath(host_path, self.compose_dir)).as_posix()
+        return "." if rel_path == "." else rel_path
+
+    def _resolve_code_uri_host_path(self, code_uri: str) -> str:
+        """CodeUri（プロジェクトルート基準）をcompose基準の相対パスに変換"""
+        normalized = (code_uri or "").strip()
+        if not normalized or normalized in (".", "./"):
+            code_path = self.project_root
+        else:
+            code_path = Path(normalized)
+            if not code_path.is_absolute():
+                code_path = self.project_root / code_path
+
+        return self._to_compose_relative_path(code_path)
 
     def _ensure_docker_templates(self) -> None:
         """実行用Dockerテンプレートをapi_mock配下へ展開"""
@@ -192,12 +212,12 @@ class DockerComposeGenerator:
                 "context": "..",
                 "dockerfile": "api_mock/docker/gateway/Dockerfile",
             },
-            "ports": ["${SAPIMO_PORT:-3000}:3000"],
+            "ports": ["${SAPIMO_PORT:-8000}:3000"],
             "environment": {
                 "SAPIMO_MODE": "gateway",
                 "LAMBDA_DISCOVERY_NETWORK": "sapimo-network",
             },
-            "volumes": ["./api_mock:/workspace/api_mock:ro"],
+            "volumes": [".:/workspace/api_mock:ro"],
             "networks": ["sapimo-network"],
             "depends_on": ["sapimo-aws-mock"],
         }
@@ -232,9 +252,9 @@ class DockerComposeGenerator:
                     **func.environment,
                 },
                 "volumes": [
-                    f"./{func.code_uri}:/var/task:rw",  # コード即時反映
-                    f"./data/lambda-{safe_name}:/tmp/lambda:rw",  # 一時ファイル
-                    "./api_mock:/workspace/api_mock:ro",  # 設定ファイル
+                    f"{self._resolve_code_uri_host_path(func.code_uri)}:/var/task:rw",  # コード即時反映
+                    f"{self._to_compose_relative_path(self.project_root / 'data' / f'lambda-{safe_name}')}:/tmp/lambda:rw",  # 一時ファイル
+                    ".:/workspace/api_mock:ro",  # 設定ファイル
                 ],
                 "networks": ["sapimo-network"],
                 "depends_on": ["sapimo-aws-mock"],
@@ -273,7 +293,10 @@ class DockerComposeGenerator:
                 "AWS_SERVICES": ",".join(self.aws_resources.keys()),
                 "AWS_DEFAULT_REGION": "us-east-1",
             },
-            "volumes": ["./data:/data:rw", "sapimo-data:/persistent-data"],
+            "volumes": [
+                f"{self._to_compose_relative_path(self.project_root / 'data')}:/data:rw",
+                "sapimo-data:/persistent-data",
+            ],
             "networks": ["sapimo-network"],
         }
 

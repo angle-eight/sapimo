@@ -28,7 +28,7 @@ sapimo generate
 sapimo start
 ```
 
-起動後は `http://localhost:3000` にアクセスします。
+起動後は `http://localhost:8000` にアクセスします。
 
 > 注意: `sapimo` 本体を更新した場合（`pip install -U sapimo` や `pip install -e .` 後）は、
 > `api_mock/docker/` のテンプレート同期のため **`sapimo init` の再実行** が必要です。
