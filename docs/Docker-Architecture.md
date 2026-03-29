@@ -6,7 +6,7 @@ Sapimoは以下の3つのコンテナで構成されています：
 
 ### 1. Gateway Container (`sapimo-gateway`)
 - **役割**: APIルーティングとLambdaコンテナ調整
-- **ポート**: 3000
+- **ポート**: 8000
 - **技術**: FastAPI + uvicorn
 - **機能**:
   - HTTP リクエストを受信
@@ -35,7 +35,7 @@ Sapimoは以下の3つのコンテナで構成されています：
 ## コンテナ間通信
 
 ```
-Client Request → Gateway (3000) → Lambda Container (8080)
+Client Request → Gateway (8000) → Lambda Container (8080)
                      ↓
                  AWS Mock (4566) ← Lambda Function (boto3)
 ```
@@ -70,7 +70,7 @@ sapimo/
 
 1. **反映**: `sapimo init`（テンプレート/compose再生成）
 2. **起動**: `sapimo start`
-3. **テスト**: `curl http://localhost:3000/{path}`
+3. **テスト**: `curl http://localhost:8000/{path}`
 4. **ログ確認**: `cd api_mock && docker compose logs {service-name}`
 5. **停止**: `cd api_mock && docker compose down`
 

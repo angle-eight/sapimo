@@ -87,6 +87,8 @@ def test_generate_compose_config_uses_project_relative_build_paths(tmp_path):
         "context": "..",
         "dockerfile": "api_mock/docker/gateway/Dockerfile",
     }
+    gateway_volumes = compose_config["services"]["sapimo-gateway"]["volumes"]
+    assert ".:/workspace/api_mock:ro" in gateway_volumes
 
     aws_mock_build = compose_config["services"]["sapimo-aws-mock"]["build"]
     assert aws_mock_build == {
@@ -97,6 +99,14 @@ def test_generate_compose_config_uses_project_relative_build_paths(tmp_path):
     lambda_build = compose_config["services"]["lambda-hello-get"]["build"]
     assert lambda_build["context"] == ".."
     assert lambda_build["dockerfile"] == "docker/lambda-runtime/Dockerfile"
+
+    lambda_volumes = compose_config["services"]["lambda-hello-get"]["volumes"]
+    assert "../lambda/hello:/var/task:rw" in lambda_volumes
+    assert "../data/lambda-hello-get:/tmp/lambda:rw" in lambda_volumes
+    assert ".:/workspace/api_mock:ro" in lambda_volumes
+
+    aws_volumes = compose_config["services"]["sapimo-aws-mock"]["volumes"]
+    assert "../data:/data:rw" in aws_volumes
 
 
 def test_generate_compose_file_writes_yaml_and_deploys_templates(tmp_path, monkeypatch):
