@@ -5,10 +5,9 @@ Lambda コンテナとのルーティング・連携を処理
 """
 
 import os
-import json
-import asyncio
 from pathlib import Path
 import httpx
+from jose import jwt
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +16,9 @@ import yaml
 
 from mock_handler import MockHandler
 from sapimo.mock.api import InputOverride, options
+from sapimo.utils import LogManager
+
+logger = LogManager.setup_logger(__file__)
 
 
 class LambdaGateway:
@@ -54,7 +56,7 @@ class LambdaGateway:
         config_path = Path("/workspace/api_mock/config.yaml")
 
         if not config_path.exists():
-            print("WARNING: config.yaml not found, using empty configuration")
+            logger.warning("config.yaml not found, using empty configuration")
             return
 
         try:
@@ -63,10 +65,12 @@ class LambdaGateway:
 
             for path, methods in config.get("paths", {}).items():
                 for method, props in methods.items():
-                    handler = props.get("Properties", {}).get(
-                        "Handler", "app.lambda_handler"
-                    )
-                    code_uri = props.get("Properties", {}).get("CodeUri", "./")
+                    properties = props.get("Properties", {})
+                    handler = properties.get("Handler", "app.lambda_handler")
+                    code_uri = properties.get("CodeUri", "./")
+                    auth_type = str(properties.get("AuthType", "NONE")).upper()
+                    authorizer = properties.get("Authorizer")
+                    auth_source = properties.get("AuthSource")
 
                     func_name = f"{path.replace('/', '_').replace('{', '').replace('}', '')}_{method}"
                     if func_name.startswith("_"):
@@ -79,19 +83,22 @@ class LambdaGateway:
                         "code_uri": code_uri,
                         "method": method.upper(),
                         "path": path,
+                        "auth_type": auth_type,
+                        "authorizer": authorizer,
+                        "auth_source": auth_source,
                     }
 
                     container_name = f"lambda-{self._sanitize_service_name(func_name)}"
                     self.lambda_containers[func_name] = container_name
 
-            print(f"Loaded {len(self.lambda_routes)} Lambda routes")
+            logger.info(f"Loaded {len(self.lambda_routes)} Lambda routes")
             for route, info in self.lambda_routes.items():
-                print(
+                logger.info(
                     f"  {route} -> {info['function_name']} ({self.lambda_containers[info['function_name']]})"
                 )
 
         except Exception as e:
-            print(f"ERROR loading configuration: {e}")
+            logger.exception(f"ERROR loading configuration: {e}")
 
     def _sanitize_service_name(self, name: str) -> str:
         """サービス名をDocker Composeで使用可能な形式に変換"""
@@ -227,17 +234,44 @@ class LambdaGateway:
                         status_code=lambda_result.get("statusCode", 200),
                     )
                 else:
+                    logger.error(
+                        "Lambda invocation returned non-200: function=%s container=%s method=%s path=/%s url=%s status=%s response=%s",
+                        function_name,
+                        container_name,
+                        request.method,
+                        path,
+                        lambda_url,
+                        response.status_code,
+                        response.text,
+                    )
                     raise HTTPException(
                         status_code=502,
                         detail=f"Lambda container error: {response.text}",
                     )
 
         except httpx.ConnectError:
+            logger.exception(
+                "Lambda container unavailable: function=%s container=%s method=%s path=/%s url=%s",
+                function_name,
+                container_name,
+                request.method,
+                path,
+                lambda_url,
+            )
             raise HTTPException(
                 status_code=503,
                 detail=f"Lambda container '{container_name}' not available",
             )
+        except HTTPException:
+            raise
         except Exception as e:
+            logger.exception(
+                "Unexpected lambda invocation error: function=%s container=%s method=%s path=/%s",
+                function_name,
+                container_name,
+                request.method,
+                path,
+            )
             raise HTTPException(status_code=500, detail=str(e))
 
     async def _invoke_lambda_with_override(
@@ -283,17 +317,44 @@ class LambdaGateway:
                         status_code=lambda_result.get("statusCode", 200),
                     )
                 else:
+                    logger.error(
+                        "Lambda invocation returned non-200 with override: function=%s container=%s method=%s path=/%s url=%s status=%s response=%s",
+                        function_name,
+                        container_name,
+                        method,
+                        path,
+                        lambda_url,
+                        response.status_code,
+                        response.text,
+                    )
                     raise HTTPException(
                         status_code=502,
                         detail=f"Lambda container error: {response.text}",
                     )
 
         except httpx.ConnectError:
+            logger.exception(
+                "Lambda container unavailable with override: function=%s container=%s method=%s path=/%s url=%s",
+                function_name,
+                container_name,
+                method,
+                path,
+                lambda_url,
+            )
             raise HTTPException(
                 status_code=503,
                 detail=f"Lambda container '{container_name}' not available",
             )
+        except HTTPException:
+            raise
         except Exception as e:
+            logger.exception(
+                "Unexpected lambda invocation error with override: function=%s container=%s method=%s path=/%s",
+                function_name,
+                container_name,
+                method,
+                path,
+            )
             raise HTTPException(status_code=500, detail=str(e))
 
     async def _build_lambda_event(self, request: Request, path: str, route_info: dict):
@@ -315,6 +376,8 @@ class LambdaGateway:
             "queryStringParameters": query_params,
             "pathParameters": path_params,
             "body": body.decode() if body else None,
+            "stageVariables": {},
+            "isBase64Encoded": False,
             "requestContext": {
                 "accountId": "123456789012",
                 "apiId": "sapimo-mock",
@@ -332,7 +395,54 @@ class LambdaGateway:
             },
         }
 
+        authorizer_context = self._build_authorizer_context(route_info, headers)
+        if authorizer_context:
+            event["requestContext"]["authorizer"] = authorizer_context
+
         return event
+
+    def _build_authorizer_context(
+        self, route_info: dict, headers: dict[str, str]
+    ) -> dict | None:
+        """
+        認証検証は行わず、AuthTypeに応じてrequestContext.authorizerを構築する。
+        旧ローカル実行系（mock/executer）の振る舞いに合わせる。
+        """
+        auth_type = str(route_info.get("auth_type", "NONE")).upper()
+
+        if auth_type in {"JWT", "COGNITO_USER_POOLS"}:
+            authorization = headers.get("authorization") or headers.get("Authorization")
+            if not authorization:
+                return None
+
+            token = authorization.replace("Bearer ", "").strip()
+            if not token:
+                return None
+
+            try:
+                claims = jwt.get_unverified_claims(token)
+                return {"jwt": {"claims": claims, "scopes": None}}
+            except Exception:
+                return None
+
+        if auth_type == "AWS_IAM":
+            return {
+                "iam": {
+                    "accessKey": "AKIAXXXXXXXXXXXXXXXX",
+                    "accountId": "1234567890",
+                    "callerId": "XXXXXXXXXXXXXXX:CognitoIdentityCredentials",
+                    "cognitoIdentity": {
+                        "amr": ["foo"],
+                        "identityId": "us-east-1:identity-id",
+                        "identityPoolId": "us-east-1:pool-id",
+                    },
+                    "principalOrgId": "principal-org-id",
+                    "userArn": "arn:aws:iam::1234567890:user/Admin",
+                    "userId": "XXXXXXXXXXXXXXXX",
+                }
+            }
+
+        return None
 
     def _extract_path_params(self, pattern: str, actual_path: str) -> dict[str, str]:
         """パスパラメータを抽出"""
