@@ -1,0 +1,594 @@
+cdk:
+  CDKMetadata:
+    aws:cdk:path: TradeDiaryBackendStack/CDKMetadata/Default
+  CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F:
+    aws:asset:path: asset.faa95a81ae7d7373f3e1f242268f904eb748d8d0fdd306e8a6fe515a1905a7d6
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/Custom::S3AutoDeleteObjectsCustomResourceProvider/Handler
+  CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092:
+    aws:cdk:path: TradeDiaryBackendStack/Custom::S3AutoDeleteObjectsCustomResourceProvider/Role
+  chartget9502C741:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.2b75bc513054870712066d9baebdf69f9269535ae48e41d5228caa617d79cc35
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/chart_get/Resource
+  chartgetServiceRole6969DCEF:
+    aws:cdk:path: TradeDiaryBackendStack/chart_get/ServiceRole/Resource
+  chartgetServiceRoleDefaultPolicyF47AED66:
+    aws:cdk:path: TradeDiaryBackendStack/chart_get/ServiceRole/DefaultPolicy/Resource
+  chartpost40E6524B:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.7dd08d854d730277f78956f511ea19bba6f263c32d2727b8c297c2b7e6bec8d7
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/chart_post/Resource
+  chartpostServiceRole505EE5B9:
+    aws:cdk:path: TradeDiaryBackendStack/chart_post/ServiceRole/Resource
+  chartpostServiceRoleDefaultPolicyC2003610:
+    aws:cdk:path: TradeDiaryBackendStack/chart_post/ServiceRole/DefaultPolicy/Resource
+  dummyget2913C6B7:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.be992679bf6106708bed087f373623110cc449ccf7e77afe652d3e660cb0e8a0
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/dummy_get/Resource
+  dummygetServiceRoleB289DBB6:
+    aws:cdk:path: TradeDiaryBackendStack/dummy_get/ServiceRole/Resource
+  dummygetServiceRoleDefaultPolicy239D2919:
+    aws:cdk:path: TradeDiaryBackendStack/dummy_get/ServiceRole/DefaultPolicy/Resource
+  dummypost7569054C:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.1065a75188af15c27b9cdbe1de0999b0efb32075fc87519cd8e383146c830672
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/dummy_post/Resource
+  dummypostServiceRoleC09ACC91:
+    aws:cdk:path: TradeDiaryBackendStack/dummy_post/ServiceRole/Resource
+  dummypostServiceRoleDefaultPolicyA1B12AE0:
+    aws:cdk:path: TradeDiaryBackendStack/dummy_post/ServiceRole/DefaultPolicy/Resource
+  historydeleteF80C37C3:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.c3d5fb0e01578ebabeb04464fde7c8947c2a82c2f28221014dd92ab73055ca94
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/history_delete/Resource
+  historydeleteServiceRoleDefaultPolicy83E3367D:
+    aws:cdk:path: TradeDiaryBackendStack/history_delete/ServiceRole/DefaultPolicy/Resource
+  historydeleteServiceRoleEBE9CB13:
+    aws:cdk:path: TradeDiaryBackendStack/history_delete/ServiceRole/Resource
+  historyfiledelete11598237:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.2a340dd94222afc3968f5bb098e206c3ff21b40abe90d3f2a8195659cd516f71
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/history_file_delete/Resource
+  historyfiledeleteServiceRole5E455F57:
+    aws:cdk:path: TradeDiaryBackendStack/history_file_delete/ServiceRole/Resource
+  historyfiledeleteServiceRoleDefaultPolicy07D1C59B:
+    aws:cdk:path: TradeDiaryBackendStack/history_file_delete/ServiceRole/DefaultPolicy/Resource
+  historyfilegetBD65EB5B:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.0c07580a464aff81c0f6e31dd0cdca2391a0519b41cbf9807312763f16c9cab5
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/history_file_get/Resource
+  historyfilegetServiceRole639773A4:
+    aws:cdk:path: TradeDiaryBackendStack/history_file_get/ServiceRole/Resource
+  historyfilegetServiceRoleDefaultPolicy5592E7A6:
+    aws:cdk:path: TradeDiaryBackendStack/history_file_get/ServiceRole/DefaultPolicy/Resource
+  historyfilepost9073F920:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.936a61e02a417fa4cde4e829935c0c028be3f6d1e0f3709b803676761c54e4d0
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/history_file_post/Resource
+  historyfilepostServiceRole042D252C:
+    aws:cdk:path: TradeDiaryBackendStack/history_file_post/ServiceRole/Resource
+  historyfilepostServiceRoleDefaultPolicy1A433D4D:
+    aws:cdk:path: TradeDiaryBackendStack/history_file_post/ServiceRole/DefaultPolicy/Resource
+  historyfileput6515B5A1:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.923b5eca7e4a48ac6b700fc834d7c082a703d1da49a907d51da2698a91f43bd7
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/history_file_put/Resource
+  historyfileputServiceRoleDefaultPolicyD0F1067D:
+    aws:cdk:path: TradeDiaryBackendStack/history_file_put/ServiceRole/DefaultPolicy/Resource
+  historyfileputServiceRoleF46DD2BB:
+    aws:cdk:path: TradeDiaryBackendStack/history_file_put/ServiceRole/Resource
+  historyget20A1A507:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.c7b8837228a2dccdac9a00aee213113769c265e541fbef7ffaa772e6c03db907
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/history_get/Resource
+  historygetServiceRole626EC0A5:
+    aws:cdk:path: TradeDiaryBackendStack/history_get/ServiceRole/Resource
+  historygetServiceRoleDefaultPolicyF133DE23:
+    aws:cdk:path: TradeDiaryBackendStack/history_get/ServiceRole/DefaultPolicy/Resource
+  httpApiC9FAD708:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/Resource
+  httpApiDELETEhistory8D4E68B4:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/DELETE--history/Resource
+  httpApiDELETEhistoryfileEDC53436:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/DELETE--history-file/Resource
+  httpApiDELETEhistoryfiletestfunc15D36F56:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/DELETE--history-file/testfunc/Resource
+  httpApiDELETEhistoryfiletestfuncPermission41A164C3:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/DELETE--history-file/testfunc-Permission
+  httpApiDELETEhistorytestfuncB42F3B73:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/DELETE--history/testfunc/Resource
+  httpApiDELETEhistorytestfuncPermission207DE4C4:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/DELETE--history/testfunc-Permission
+  httpApiDefaultStage49B103A5:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/DefaultStage/Resource
+  httpApiGETchart93314DC3:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--chart/Resource
+  httpApiGETcharttestfunc1E74754E:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--chart/testfunc/Resource
+  httpApiGETcharttestfuncPermission3C85EBE7:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--chart/testfunc-Permission
+  httpApiGETdummyB4CAD3E3:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--dummy/Resource
+  httpApiGETdummytestfuncF7575BD2:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--dummy/testfunc/Resource
+  httpApiGETdummytestfuncPermission6429DD55:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--dummy/testfunc-Permission
+  httpApiGEThistory9011EDCA:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--history/Resource
+  httpApiGEThistoryfile312E0A5F:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--history-file/Resource
+  httpApiGEThistoryfiletestfuncC0642632:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--history-file/testfunc/Resource
+  httpApiGEThistoryfiletestfuncPermission587DD167:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--history-file/testfunc-Permission
+  httpApiGEThistorytestfunc7B5E873C:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--history/testfunc/Resource
+  httpApiGEThistorytestfuncPermissionB3459F49:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--history/testfunc-Permission
+  httpApiGETsettings2B4E8072:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--settings/Resource
+  httpApiGETsettingstestfunc152C7693:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--settings/testfunc/Resource
+  httpApiGETsettingstestfuncPermission17913CDC:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--settings/testfunc-Permission
+  httpApiGETtestfilesAA58120F:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--test-files/Resource
+  httpApiGETtestfilestestfuncF71C4F56:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--test-files/testfunc/Resource
+  httpApiGETtestfilestestfuncPermission979CA6E1:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--test-files/testfunc-Permission
+  httpApiGETusedstoragerateDB45BB16:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--used-storage-rate/Resource
+  httpApiGETusedstorageratetestfunc9ED26DA1:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--used-storage-rate/testfunc/Resource
+  httpApiGETusedstorageratetestfuncPermissionBE633BE2:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/GET--used-storage-rate/testfunc-Permission
+  httpApiPOSTchart3FB76E36:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--chart/Resource
+  httpApiPOSTcharttestfunc975DA138:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--chart/testfunc/Resource
+  httpApiPOSTcharttestfuncPermissionDF1A9F35:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--chart/testfunc-Permission
+  httpApiPOSTdummyD0103E7D:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--dummy/Resource
+  httpApiPOSTdummytestfunc2265EFAA:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--dummy/testfunc/Resource
+  httpApiPOSTdummytestfuncPermission5C260EF2:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--dummy/testfunc-Permission
+  httpApiPOSThistoryfile3A2A155A:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--history-file/Resource
+  httpApiPOSThistoryfiletestfuncC28D25FE:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--history-file/testfunc/Resource
+  httpApiPOSThistoryfiletestfuncPermission9A958D56:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--history-file/testfunc-Permission
+  httpApiPOSTonetrade0371C21D:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--one-trade/Resource
+  httpApiPOSTonetradetestfunc6FD532E4:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--one-trade/testfunc/Resource
+  httpApiPOSTonetradetestfuncPermission11F4E05A:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--one-trade/testfunc-Permission
+  httpApiPOSTreview95840129:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--review/Resource
+  httpApiPOSTreviewtestfunc37F54BD4:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--review/testfunc/Resource
+  httpApiPOSTreviewtestfuncPermission2A1DCB23:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--review/testfunc-Permission
+  httpApiPOSTsettings8DA86930:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--settings/Resource
+  httpApiPOSTsettingstestfunc62D3E3C5:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--settings/testfunc/Resource
+  httpApiPOSTsettingstestfuncPermission7ECAE48A:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--settings/testfunc-Permission
+  httpApiPOSTsimpletradesD19A89E6:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--simple-trades/Resource
+  httpApiPOSTsimpletradestestfuncE3BB6740:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--simple-trades/testfunc/Resource
+  httpApiPOSTsimpletradestestfuncPermission42BE21E8:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/POST--simple-trades/testfunc-Permission
+  httpApiPUThistoryfileB4790514:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/PUT--history-file/Resource
+  httpApiPUThistoryfiletestfuncEC331FA8:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/PUT--history-file/testfunc/Resource
+  httpApiPUThistoryfiletestfuncPermissionA7121A21:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/PUT--history-file/testfunc-Permission
+  httpApihttpauth7E9E1E76:
+    aws:cdk:path: TradeDiaryBackendStack/httpApi/http_auth/Resource
+  libsE8B41711:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.4b66840bbf791aba7aaa1c9354d229e04ed9151a28e5d884a7ecf2600f177350
+    aws:asset:property: Content
+    aws:cdk:path: TradeDiaryBackendStack/libs/Resource
+  onetradepostF4EFD3B5:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.fd29957f3220951187b24f17f6c55de14e251513822c155d308ac9d9057fc25c
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/one_trade_post/Resource
+  onetradepostServiceRoleDefaultPolicy593742B8:
+    aws:cdk:path: TradeDiaryBackendStack/one_trade_post/ServiceRole/DefaultPolicy/Resource
+  onetradepostServiceRoleFDD20701:
+    aws:cdk:path: TradeDiaryBackendStack/one_trade_post/ServiceRole/Resource
+  reviewpost9AD04FEA:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.f2eea95161976fc789da7cc3b266e8cb79fe8c1cecd1c945346669e712b8cac0
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/review_post/Resource
+  reviewpostServiceRoleB868B0C1:
+    aws:cdk:path: TradeDiaryBackendStack/review_post/ServiceRole/Resource
+  reviewpostServiceRoleDefaultPolicy34993BC5:
+    aws:cdk:path: TradeDiaryBackendStack/review_post/ServiceRole/DefaultPolicy/Resource
+  settingsget695EF2E7:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.a4ca5d5d59b2c5a2c7f3d4e4acb1cf72a87873f983a20faba29631e588dd358f
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/settings_get/Resource
+  settingsgetServiceRole012B360E:
+    aws:cdk:path: TradeDiaryBackendStack/settings_get/ServiceRole/Resource
+  settingsgetServiceRoleDefaultPolicy9084A436:
+    aws:cdk:path: TradeDiaryBackendStack/settings_get/ServiceRole/DefaultPolicy/Resource
+  settingspost405A5158:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.c6519f3ab23a497b67fd22506dd835d8ea81a07e3dd079158eff04ebdda8b017
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/settings_post/Resource
+  settingspostServiceRoleDefaultPolicyB3DECC39:
+    aws:cdk:path: TradeDiaryBackendStack/settings_post/ServiceRole/DefaultPolicy/Resource
+  settingspostServiceRoleFA28846E:
+    aws:cdk:path: TradeDiaryBackendStack/settings_post/ServiceRole/Resource
+  simpletradespost1EB6972E:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.714b2cefe624c009bcca7df76d829fcaafd58a0d007cc78d7940d8ea4a9d1c33
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/simple_trades_post/Resource
+  simpletradespostServiceRoleDefaultPolicy294B1E48:
+    aws:cdk:path: TradeDiaryBackendStack/simple_trades_post/ServiceRole/DefaultPolicy/Resource
+  simpletradespostServiceRoleED8289AB:
+    aws:cdk:path: TradeDiaryBackendStack/simple_trades_post/ServiceRole/Resource
+  storagegetA1610ECC:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.d74d38f138602a986cc50f1616ff0a93c87f0d4b0cd7db52d6e0175a414f5cb7
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/storage_get/Resource
+  storagegetServiceRole4F83BA77:
+    aws:cdk:path: TradeDiaryBackendStack/storage_get/ServiceRole/Resource
+  storagegetServiceRoleDefaultPolicy1336E1DA:
+    aws:cdk:path: TradeDiaryBackendStack/storage_get/ServiceRole/DefaultPolicy/Resource
+  testfilelistget4AA42DCF:
+    aws:asset:is-bundled: true
+    aws:asset:path: asset.e7cbebffebd4a7557bf01a14af39f16fddd17655b6eaa9e041e5af38b8570648
+    aws:asset:property: Code
+    aws:cdk:path: TradeDiaryBackendStack/test_file_list_get/Resource
+  testfilelistgetServiceRoleDAE79050:
+    aws:cdk:path: TradeDiaryBackendStack/test_file_list_get/ServiceRole/Resource
+  testfilelistgetServiceRoleDefaultPolicy53586F09:
+    aws:cdk:path: TradeDiaryBackendStack/test_file_list_get/ServiceRole/DefaultPolicy/Resource
+  tradediarydynamodbBF943B8C:
+    aws:cdk:path: TradeDiaryBackendStack/trade-diary-dynamo-db/Resource
+  tradediarydynamodbReadScalingTargetAE62075D:
+    aws:cdk:path: TradeDiaryBackendStack/trade-diary-dynamo-db/ReadScaling/Target/Resource
+  tradediaryphoenixers3pricebucket97CE60EB:
+    aws:cdk:path: TradeDiaryBackendStack/trade-diary-phoenixer-s3-price-bucket/Resource
+  tradediaryphoenixers3pricebucketPolicyA6167B94:
+    aws:cdk:path: TradeDiaryBackendStack/trade-diary-phoenixer-s3-price-bucket/Policy/Resource
+  tradediarys3bucketA433DF47:
+    aws:cdk:path: TradeDiaryBackendStack/trade-diary-s3-bucket/Resource
+  tradediarys3bucketAutoDeleteObjectsCustomResource3691B7EA:
+    aws:cdk:path: TradeDiaryBackendStack/trade-diary-s3-bucket/AutoDeleteObjectsCustomResource/Default
+  tradediarys3bucketPolicy7A817774:
+    aws:cdk:path: TradeDiaryBackendStack/trade-diary-s3-bucket/Policy/Resource
+  userPoolDC9497E0:
+    aws:cdk:path: TradeDiaryBackendStack/userPool/Resource
+  userPoolctraderclient77D38AF2:
+    aws:cdk:path: TradeDiaryBackendStack/userPool/ctrader_client/Resource
+  userPoolwebclient1A63DACF:
+    aws:cdk:path: TradeDiaryBackendStack/userPool/web_client/Resource
+dynamodb:
+  trade-diary-dynamo-db:
+    AttributeDefinitions:
+    - AttributeName: Pkey
+      AttributeType: S
+    - AttributeName: Skey
+      AttributeType: S
+    KeySchema:
+    - AttributeName: Pkey
+      KeyType: HASH
+    - AttributeName: Skey
+      KeyType: RANGE
+    ProvisionedThroughput:
+      ReadCapacityUnits: 10
+      WriteCapacityUnits: 10
+    TableName: trade-diary-dynamo-db
+paths:
+  /chart:
+    get:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/chart_get
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+    post:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/chart_post
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /dummy:
+    get:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/dummy_get
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+    post:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/dummy_post
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /history:
+    delete:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/history_delete
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+    get:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/history_get
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /history-file:
+    delete:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/history_file_delete
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+    get:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/history_file_get
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+    post:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/history_file_post
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+    put:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/history_file_put
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /one-trade:
+    post:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/one_trade_post
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /review:
+    post:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/review_post
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /settings:
+    get:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/settings_get
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+    post:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/settings_post
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /simple-trades:
+    post:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/simple_trades_post
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /test-files:
+    get:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/test_file_list_get
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+  /used-storage-rate:
+    get:
+      Properties:
+        AuthType: JWT
+        CodeUri: lambdafunc/storage_get
+        Environment:
+          Variables:
+            BUCKET_NAME: tradediarys3bucketA433DF47
+            PRIMARY_KEY: Pkey
+            SORT_KEY: Skey
+            TABLE_NAME: trade-diary-dynamo-db
+        EventType: APIGW_V2
+        Handler: index.handler
+        Layers:
+        - lambdafunc/libs
+        Runtime: python3.9
+s3:
+  tradediaryphoenixers3pricebucket97CE60EB:
+    CorsConfiguration:
+      CorsRules:
+      - AllowedHeaders:
+        - '*'
+        AllowedMethods:
+        - GET
+        AllowedOrigins:
+        - '*'
+    PublicAccessBlockConfiguration:
+      BlockPublicAcls: true
+      IgnorePublicAcls: true
+  tradediarys3bucketA433DF47:
+    Tags:
+    - Key: aws-cdk:auto-delete-objects
+      Value: 'true'

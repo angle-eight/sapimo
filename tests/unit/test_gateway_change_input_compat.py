@@ -66,6 +66,14 @@ def anyio_backend():
     return "asyncio"
 
 
+def test_input_override_accepts_keyword_arguments_for_backward_compatibility():
+    """旧ゲートウェイ互換: InputOverride(path=...) 形式を受け付ける"""
+    override = InputOverride(path="/simple-trades", method="POST")
+
+    assert override.data["path"] == "/simple-trades"
+    assert override.data["method"] == "POST"
+
+
 @pytest.mark.anyio
 async def test_tc_ovr_001_short_key_maps_to_path_params(monkeypatch):
     """change_input(date=3) → pathParameters["date"] == "3" """
