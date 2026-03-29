@@ -35,7 +35,19 @@ sapimo start
 
 起動後は `http://localhost:8000` にアクセスします。
 
-> 注意: sapimo を更新した後は、`api_mock/docker/` テンプレート更新のため `sapimo init` を再実行してください。
+> 注意: sapimo を更新した後は、`api_mock/docker/` runtime 資産更新のため `sapimo init` を再実行してください。
+
+### fail-fast 方針
+
+1. `api_mock/docker/` が存在しない状態は異常です
+2. `status` / `clean` はこの異常状態で即失敗します
+3. フォールバックで隠蔽せず、`sapimo init` で整合を回復してください
+
+### 外部プロジェクト利用時の前提
+
+1. 本ライブラリは `pip install` で他リポジトリから使う前提です
+2. そのため `workspace/src` があることは前提にしません
+3. ランタイム import は `api_mock/docker/` 配下の同梱資産で完結させます
 
 ---
 
@@ -103,7 +115,11 @@ docker compose logs sapimo
 docker compose up --build
 ```
 
+補足: CLI (`sapimo start`) は Compose project 名を内部で一意化して実行します。
+手動で `docker compose` を叩く場合は、別リポジトリの同名 `api_mock` と衝突しないよう注意してください。
+
 ### Lambda関数が実行されない
 1. `api_mock/config.yaml` の `Properties.CodeUri` と `Properties.Handler` を確認
 2. `api_mock/docker-compose.yml` が存在するか確認（`sapimo init` で生成）
 3. レイヤー利用時は `Properties.Layers` のパス実在を確認
+4. `api_mock/docker/` が存在しない場合は `sapimo init` を再実行
