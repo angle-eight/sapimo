@@ -49,6 +49,137 @@ class AwsMock(ABC):
             return SnsMock(config)
         elif name == "ses":
             return SesMock(config)
+        elif name == "cognito":
+            return CognitoMock(config)
+
+
+class CognitoMock(AwsMock):
+    service_name = "cognito"
+
+    def __init__(self, config: dict):
+        self._mock = mock_aws()
+        self._config = config
+        self._local_path = WORKING_DIR / "cognito"
+        self._pool_ids: dict[str, str] = {}  # pool_name -> UserPoolId
+        self._client_ids: dict[
+            str, dict[str, str]
+        ] = {}  # pool_name -> {client_name -> ClientId}
+
+        self._local_path.mkdir(exist_ok=True)
+        for pool_name in self._config.keys():
+            (self._local_path / pool_name).mkdir(exist_ok=True)
+
+    def init_data(self):
+        self._client = boto3.client("cognito-idp", region_name="us-east-1")
+
+        for pool_name, pool_config in self._config.items():
+            # Create User Pool
+            pool_resp = self._client.create_user_pool(
+                PoolName=pool_config.get("PoolName", pool_name),
+                AutoVerifiedAttributes=pool_config.get("AutoVerifiedAttributes", []),
+                Policies={
+                    "PasswordPolicy": {
+                        "MinimumLength": 8,
+                        "RequireUppercase": False,
+                        "RequireLowercase": False,
+                        "RequireNumbers": False,
+                        "RequireSymbols": False,
+                    }
+                },
+            )
+            pool_id = pool_resp["UserPool"]["Id"]
+            self._pool_ids[pool_name] = pool_id
+            self._client_ids[pool_name] = {}
+
+            # Create User Pool Clients
+            for client_config in pool_config.get("Clients", []):
+                client_name = client_config.get("ClientName", "default")
+                explicit_auth_flows = client_config.get(
+                    "ExplicitAuthFlows", ["USER_PASSWORD_AUTH"]
+                )
+                # moto expects ALLOW_ prefix for auth flows
+                auth_flows = []
+                for flow in explicit_auth_flows:
+                    if not flow.startswith("ALLOW_"):
+                        auth_flows.append(f"ALLOW_{flow}")
+                    else:
+                        auth_flows.append(flow)
+
+                client_resp = self._client.create_user_pool_client(
+                    UserPoolId=pool_id,
+                    ClientName=client_name,
+                    ExplicitAuthFlows=auth_flows,
+                    GenerateSecret=False,
+                )
+                client_id = client_resp["UserPoolClient"]["ClientId"]
+                self._client_ids[pool_name][client_name] = client_id
+
+            # Load initial users from data.json
+            pool_path = self._local_path / pool_name
+            data_file = pool_path / "data.json"
+            if data_file.exists() and data_file.stat().st_size >= 2:
+                with open(data_file, "r") as f:
+                    users = json.load(f)
+                if not isinstance(users, list):
+                    users = [users]
+
+                # Need a client_id for sign_up; use the first client
+                first_client_id = next(iter(self._client_ids[pool_name].values()), None)
+                if first_client_id:
+                    for user in users:
+                        username = user.get("username")
+                        password = user.get("password")
+                        if not username or not password:
+                            continue
+                        user_attributes = []
+                        if "email" in user:
+                            user_attributes.append(
+                                {"Name": "email", "Value": user["email"]}
+                            )
+                        self._client.sign_up(
+                            ClientId=first_client_id,
+                            Username=username,
+                            Password=password,
+                            UserAttributes=user_attributes,
+                        )
+                        self._client.admin_confirm_sign_up(
+                            UserPoolId=pool_id,
+                            Username=username,
+                        )
+
+            logger.info(
+                f"Cognito pool '{pool_name}' created: PoolId={pool_id}, "
+                f"Clients={list(self._client_ids[pool_name].keys())}"
+            )
+
+    def sync(self) -> dict:
+        changed_pools = []
+        for pool_name, pool_id in self._pool_ids.items():
+            resp = self._client.list_users(UserPoolId=pool_id)
+            users = [
+                {
+                    "username": u["Username"],
+                    "status": u["UserStatus"],
+                    "attributes": {
+                        a["Name"]: a["Value"] for a in u.get("Attributes", [])
+                    },
+                }
+                for u in resp.get("Users", [])
+            ]
+
+            pool_path = self._local_path / pool_name
+            data_file = pool_path / "data.json"
+            with open(data_file, "w") as f:
+                json.dump(users, f, indent=4, ensure_ascii=False)
+            changed_pools.append(pool_name)
+
+        return {"pools": changed_pools}
+
+    def get_pool_id(self, pool_name: str) -> str | None:
+        return self._pool_ids.get(pool_name)
+
+    def get_client_id(self, pool_name: str, client_name: str) -> str | None:
+        return self._client_ids.get(pool_name, {}).get(client_name)
 
 
 class SnsMock(AwsMock):
@@ -395,7 +526,7 @@ class DynamoMock(AwsMock):
 class MockManager:
     def __init__(self, config_file):
         config = ConfigParser(config_file)
-        services = ["s3", "dynamodb", "sns", "sqs", "ses"]
+        services = ["s3", "dynamodb", "sns", "sqs", "ses", "cognito"]
         self._services = []
         self._changed = {}
         for service in services:
@@ -424,3 +555,47 @@ class MockManager:
 
     def get_change(self, service: str):
         return self._changed.get(service, {})
+
+    def _get_cognito_mock(self) -> CognitoMock | None:
+        for mock in self._services:
+            if isinstance(mock, CognitoMock):
+                return mock
+        return None
+
+    def get_cognito_pool_id(self, pool_name: str) -> str | None:
+        cognito = self._get_cognito_mock()
+        return cognito.get_pool_id(pool_name) if cognito else None
+
+    def get_cognito_client_id(self, pool_name: str, client_name: str) -> str | None:
+        cognito = self._get_cognito_mock()
+        return cognito.get_client_id(pool_name, client_name) if cognito else None
+
+    def resolve_placeholders(self, env: dict[str, str]) -> dict[str, str]:
+        """Resolve ${cognito:...} placeholders in environment variables."""
+        import re
+
+        cognito = self._get_cognito_mock()
+        if not cognito:
+            return env
+
+        pattern = re.compile(r"\$\{cognito:([^}]+)\}")
+        resolved = {}
+        for key, value in env.items():
+            value_str = str(value)
+            match = pattern.search(value_str)
+            if match:
+                parts = match.group(1).split(":")
+                replacement = None
+                if len(parts) == 2 and parts[1] == "PoolId":
+                    replacement = cognito.get_pool_id(parts[0])
+                elif len(parts) == 3 and parts[1] == "ClientId":
+                    replacement = cognito.get_client_id(parts[0], parts[2])
+
+                if replacement:
+                    resolved[key] = pattern.sub(replacement, value_str)
+                else:
+                    logger.warning(f"Unresolved Cognito placeholder: {value_str}")
+                    resolved[key] = value_str
+            else:
+                resolved[key] = value_str
+        return resolved

@@ -145,6 +145,14 @@ MockManager.stop()
 - moto の mock_aws は有効化されるが、ローカルファイルとの同期は未実装
 - Lambda コードからの SNS/SES API 呼び出しは moto が応答する
 
+#### CognitoMock
+
+- **初期化**: `config.yaml` の `cognito` セクションから UserPool ・ UserPoolClient を作成。`api_mock/cognito/<プール名>/data.json` から初期ユーザーを投入（`sign_up` + `admin_confirm_sign_up`）
+- **同期**: `list_users()` でユーザー一覧を `data.json` に書き戻し
+- **プレースホルダー**: Lambda 環境変数内の `${cognito:<pool>:PoolId}` や `${cognito:<pool>:ClientId:<client>}` を Gateway 起動時に実際の ID に解決
+- **データ形式**: `data.json` は `[{"username": "...", "password": "...", "email": "..."}]` 形式
+- **認証フロー**: moto が `initiate_auth` (`USER_PASSWORD_AUTH`) をサポート。トークンの発行・検証も moto が透過的に処理
+
 ---
 
 ## 3. Gateway 内でのリクエスト処理フロー
@@ -197,6 +205,9 @@ api_mock/
 │       ├── 0000.txt       ← メッセージ本文
 │       ├── 0001.txt
 │       └── ...
+├── cognito/
+│   └── <プール名>/
+│       └── data.json      ← ユーザーの JSON 配列 [{username, password, email}]
 ├── sns/                   ← (将来対応用。現在は空)
 └── ses/                   ← (将来対応用。現在は空)
 ```

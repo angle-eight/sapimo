@@ -40,6 +40,8 @@ class CfResourceParser(FnResolver):
         self._secrets = {}  # key:secret name
         self._parameters = {}  # key:parameter name
         self._cloudwatch_alarms = {}  # key:alarm name
+        self._cognito_pools = {}  # key:resource name -> pool props
+        self._cognito_clients = {}  # key:resource name -> client props
         self._others = {}  # key:resource name
 
     def _classification(self, name: str, val: dict):
@@ -95,6 +97,12 @@ class CfResourceParser(FnResolver):
             param_name = props.get("Name", name)
             self._parameters[param_name] = props
 
+        # Identity and authentication services
+        elif resource_type == "AWS::Cognito::UserPool":
+            self._cognito_pools[name] = props
+        elif resource_type == "AWS::Cognito::UserPoolClient":
+            self._cognito_clients[name] = props
+
         else:
             self._others[name] = props
 
@@ -131,7 +139,55 @@ class CfResourceParser(FnResolver):
         if self._cloudwatch_alarms:
             config["cloudwatch"] = self._cloudwatch_alarms
 
+        if self._cognito_pools:
+            config["cognito"] = self._build_cognito_config()
+
         return config
+
+    def _build_cognito_config(self) -> dict:
+        """Build cognito config section by nesting Clients under their Pools."""
+        cognito = {}
+        # Map UserPoolId (logical resource name) -> pool config key
+        pool_id_map: dict[str, str] = {}  # resource_name -> config key
+
+        for resource_name, props in self._cognito_pools.items():
+            pool_name = props.get("UserPoolName", resource_name)
+            cognito[pool_name] = {
+                "PoolName": pool_name,
+                "Clients": [],
+            }
+            if "AutoVerifiedAttributes" in props:
+                cognito[pool_name]["AutoVerifiedAttributes"] = props[
+                    "AutoVerifiedAttributes"
+                ]
+            pool_id_map[resource_name] = pool_name
+
+        # Attach clients to their pools
+        for _resource_name, props in self._cognito_clients.items():
+            user_pool_id = props.get("UserPoolId", "")
+            # UserPoolId may be a Ref to the logical resource name
+            target_pool = pool_id_map.get(user_pool_id)
+            if target_pool and target_pool in cognito:
+                client_entry = {
+                    "ClientName": props.get("ClientName", _resource_name),
+                }
+                if "ExplicitAuthFlows" in props:
+                    client_entry["ExplicitAuthFlows"] = props["ExplicitAuthFlows"]
+                else:
+                    client_entry["ExplicitAuthFlows"] = ["USER_PASSWORD_AUTH"]
+                cognito[target_pool]["Clients"].append(client_entry)
+
+        # Ensure pools without explicit clients get a default client
+        for pool_name, pool_cfg in cognito.items():
+            if not pool_cfg["Clients"]:
+                pool_cfg["Clients"].append(
+                    {
+                        "ClientName": "default",
+                        "ExplicitAuthFlows": ["USER_PASSWORD_AUTH"],
+                    }
+                )
+
+        return cognito
 
     def create_config_file(self, output_path: Path, overwrite: bool = True):
         """create config.yaml file"""
@@ -245,6 +301,21 @@ class CfResourceParser(FnResolver):
         elif tp == "AWS::SES::EmailIdentity":
             email_identity = props.get("EmailIdentity", name)
             return {"Ref": email_identity}
+
+        # Identity and authentication services
+        elif tp == "AWS::Cognito::UserPool":
+            pool_name = props.get("UserPoolName", name)
+            pool_id = f"{self._region}_{name[:8]}"
+            return {
+                "Ref": pool_id,
+                "Arn": self._arn_tmp.format("cognito-idp:userpool", pool_id),
+                "ProviderName": f"cognito-idp.{self._region}.amazonaws.com/{pool_id}",
+            }
+
+        elif tp == "AWS::Cognito::UserPoolClient":
+            return {
+                "Ref": f"{name}-client-id",
+            }
 
         # Default case
         else:

@@ -48,7 +48,7 @@ class DockerMockManager(BaseMockManager):
         self.data_path.mkdir(parents=True, exist_ok=True)
 
         # 各AWSサービス用ディレクトリを作成
-        for service in ["s3", "dynamodb", "sqs", "sns", "ses"]:
+        for service in ["s3", "dynamodb", "sqs", "sns", "ses", "cognito"]:
             (self.data_path / service).mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Docker environment setup complete. Data path: {self.data_path}")
