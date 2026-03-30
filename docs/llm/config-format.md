@@ -79,6 +79,16 @@ ses:
   <ID名>:
     EmailIdentity: <string>
 
+cognito:
+  <プール名>:
+    PoolName: <string>          # UserPool 名
+    AutoVerifiedAttributes:     # (オプション) 自動検証属性
+      - email
+    Clients:
+      - ClientName: <string>    # UserPoolClient 名
+        ExplicitAuthFlows:      # (オプション) 認証フロー
+          - USER_PASSWORD_AUTH
+
 # ─── CDK 固有（自動生成のみ。手動編集不要） ───
 cdk:
   <リソース名>:
@@ -129,6 +139,14 @@ dynamodb:
       - AttributeName: id
         KeyType: HASH
     BillingMode: PAY_PER_REQUEST
+
+cognito:
+  MyCognitoPool:
+    PoolName: MyCognitoPool
+    Clients:
+      - ClientName: WebClient
+        ExplicitAuthFlows:
+          - USER_PASSWORD_AUTH
 ```
 
 ### CDK から生成される config.yaml の特徴
@@ -160,12 +178,21 @@ self.lambda_routes[route_key] = {
 
 ### MockManager での利用
 
-`s3`, `dynamodb`, `sqs`, `sns`, `ses` セクションの設定をそのまま boto3 の引数として使い、moto でリソースを作成する:
+`s3`, `dynamodb`, `sqs`, `sns`, `ses`, `cognito` セクションの設定をそのまま boto3 の引数として使い、moto でリソースを作成する:
 
 ```python
 # DynamoDB の例
 self._dynamodb.create_table(**props)  # config の dict をそのまま展開
 ```
+
+#### Cognito プレースホルダー
+
+Lambda 環境変数内の Cognito プレースホルダーは Gateway 起動時に自動解決される:
+
+| プレースホルダー | 解決先 |
+|-----------------|--------|
+| `${cognito:<pool_name>:PoolId}` | moto が生成した UserPoolId |
+| `${cognito:<pool_name>:ClientId:<client_name>}` | moto が生成した ClientId |
 
 ---
 

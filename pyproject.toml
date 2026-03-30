@@ -12,6 +12,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "boto3>=1.42.75",
     "moto>=5.1.22",
+    "joserfc>=1.0.0",
     "click>=8.3.1",
 ]
 

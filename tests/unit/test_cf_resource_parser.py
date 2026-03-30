@@ -53,6 +53,8 @@ def test_s3_bucket_classification():
     parser._secrets = {}
     parser._parameters = {}
     parser._cloudwatch_alarms = {}
+    parser._cognito_pools = {}
+    parser._cognito_clients = {}
     parser._others = {}
 
     # Test named bucket
@@ -94,6 +96,8 @@ def test_dynamodb_table_classification():
     parser._secrets = {}
     parser._parameters = {}
     parser._cloudwatch_alarms = {}
+    parser._cognito_pools = {}
+    parser._cognito_clients = {}
     parser._others = {}
 
     # Test regular DynamoDB table
@@ -139,6 +143,8 @@ def test_sqs_classification():
     parser._secrets = {}
     parser._parameters = {}
     parser._cloudwatch_alarms = {}
+    parser._cognito_pools = {}
+    parser._cognito_clients = {}
     parser._others = {}
 
     sqs_resource = {
@@ -168,6 +174,8 @@ def test_modern_aws_services():
     parser._secrets = {}
     parser._parameters = {}
     parser._cloudwatch_alarms = {}
+    parser._cognito_pools = {}
+    parser._cognito_clients = {}
     parser._others = {}
 
     # Test each modern service
@@ -248,6 +256,8 @@ def test_get_config_dict():
     parser._secrets = {}
     parser._parameters = {}
     parser._cloudwatch_alarms = {}
+    parser._cognito_pools = {}
+    parser._cognito_clients = {}
     parser._others = {}
 
     config = parser._get_config_dict()
@@ -331,6 +341,8 @@ def test_unknown_resource_type():
     parser._secrets = {}
     parser._parameters = {}
     parser._cloudwatch_alarms = {}
+    parser._cognito_pools = {}
+    parser._cognito_clients = {}
     parser._others = {}
 
     unknown_resource = {
@@ -438,3 +450,120 @@ Outputs:
     assert parsed["Outputs"]["FunctionArn"]["Value"] == {
         "Fn::GetAtt": ["SampleFunction", "Arn"]
     }
+
+
+def _make_parser_for_classification():
+    """Helper to create a parser instance for classification tests."""
+    parser = CfResourceParser.__new__(CfResourceParser)
+    parser._preprocess = lambda *args: None
+    parser._buckets = {}
+    parser._tables = {}
+    parser._sqss = {}
+    parser._snss = {}
+    parser._sess = {}
+    parser._kinesis_streams = {}
+    parser._kinesis_firehose = {}
+    parser._eventbridge_rules = {}
+    parser._secrets = {}
+    parser._parameters = {}
+    parser._cloudwatch_alarms = {}
+    parser._cognito_pools = {}
+    parser._cognito_clients = {}
+    parser._others = {}
+    parser._arn_tmp = "arn:aws:lambda:us-east-1:123456789012:{0}:{1}"
+    parser._aws_region = "us-east-1"
+    return parser
+
+
+def test_cognito_user_pool_classification():
+    """AWS::Cognito::UserPool が _cognito_pools に分類されること"""
+    parser = _make_parser_for_classification()
+
+    pool_resource = {
+        "Type": "AWS::Cognito::UserPool",
+        "Properties": {
+            "UserPoolName": "my-user-pool",
+            "AutoVerifiedAttributes": ["email"],
+        },
+    }
+    parser._classification("MyUserPool", pool_resource)
+
+    assert "MyUserPool" in parser._cognito_pools
+    assert parser._cognito_pools["MyUserPool"]["UserPoolName"] == "my-user-pool"
+
+
+def test_cognito_user_pool_client_classification():
+    """AWS::Cognito::UserPoolClient が _cognito_clients に分類されること"""
+    parser = _make_parser_for_classification()
+
+    client_resource = {
+        "Type": "AWS::Cognito::UserPoolClient",
+        "Properties": {
+            "ClientName": "web-client",
+            "UserPoolId": "MyUserPool",
+            "ExplicitAuthFlows": ["ALLOW_USER_PASSWORD_AUTH"],
+        },
+    }
+    parser._classification("MyClient", client_resource)
+
+    assert "MyClient" in parser._cognito_clients
+    assert parser._cognito_clients["MyClient"]["ClientName"] == "web-client"
+    assert parser._cognito_clients["MyClient"]["UserPoolId"] == "MyUserPool"
+
+
+def test_cognito_config_dict_output():
+    """_get_config_dict() に cognito セクションが含まれること"""
+    parser = _make_parser_for_classification()
+
+    # Add pool
+    parser._cognito_pools["MyPool"] = {
+        "UserPoolName": "my-pool",
+        "AutoVerifiedAttributes": ["email"],
+    }
+    # Add client referencing the pool
+    parser._cognito_clients["MyClient"] = {
+        "ClientName": "web-client",
+        "UserPoolId": "MyPool",
+        "ExplicitAuthFlows": ["ALLOW_USER_PASSWORD_AUTH"],
+    }
+
+    config = parser._get_config_dict()
+
+    assert "cognito" in config
+    assert "my-pool" in config["cognito"]
+    pool = config["cognito"]["my-pool"]
+    assert pool["PoolName"] == "my-pool"
+    assert pool["AutoVerifiedAttributes"] == ["email"]
+    assert len(pool["Clients"]) == 1
+    assert pool["Clients"][0]["ClientName"] == "web-client"
+    assert pool["Clients"][0]["ExplicitAuthFlows"] == ["ALLOW_USER_PASSWORD_AUTH"]
+
+
+def test_cognito_config_dict_default_client():
+    """Client なしの Pool にデフォルト Client が付与されること"""
+    parser = _make_parser_for_classification()
+
+    parser._cognito_pools["MyPool"] = {"UserPoolName": "my-pool"}
+
+    config = parser._get_config_dict()
+
+    assert "cognito" in config
+    pool = config["cognito"]["my-pool"]
+    assert len(pool["Clients"]) == 1
+    assert pool["Clients"][0]["ClientName"] == "default"
+    assert "USER_PASSWORD_AUTH" in pool["Clients"][0]["ExplicitAuthFlows"]
+
+
+def test_cognito_get_ref_and_attr():
+    """Cognito UserPool の Ref/Attr が正しく返ること"""
+    parser = _make_parser_for_classification()
+
+    pool_resource = {
+        "Type": "AWS::Cognito::UserPool",
+        "Properties": {"UserPoolName": "my-pool"},
+    }
+    result = parser._get_ref_and_attr("MyPool", pool_resource)
+
+    assert "Ref" in result
+    assert "Arn" in result
+    assert "cognito-idp" in result["Arn"]

@@ -63,10 +63,20 @@ class LambdaGateway:
             self.mock_manager = MockManager(config_file=self.config_path)
             self.mock_manager.start()
             self.mock_manager.init_data()
+            self._resolve_env_placeholders()
             logger.info("Initialized in-process AWS mocks for single-container mode")
         except Exception:
             logger.exception("Failed to initialize in-process AWS mocks")
             raise
+
+    def _resolve_env_placeholders(self):
+        """Resolve ${cognito:...} placeholders in all route environment variables."""
+        if not self.mock_manager:
+            return
+        for route_info in self.lambda_routes.values():
+            env = route_info.get("environment", {})
+            if env:
+                route_info["environment"] = self.mock_manager.resolve_placeholders(env)
 
     def _register_lifecycle_handlers(self):
         @self.app.on_event("shutdown")
