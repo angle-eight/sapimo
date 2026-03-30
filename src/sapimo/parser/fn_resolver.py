@@ -2,6 +2,7 @@ from pathlib import Path
 
 import yaml
 
+from sapimo.exceptions import SamTemplateParseError
 from sapimo.utils import LogManager
 from sapimo.parser.yaml_loader import yaml_parse
 
@@ -37,19 +38,15 @@ class FnResolver:
             yaml_str = open(filepath).read()
             self._whole = yaml_parse(yaml_str)
             logger.info(f"yaml_dict:{self._whole}")
-        except yaml.parser.ParserError:
+        except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
             logger.exception("yaml parse error")
-            self._whole = {}
-        except yaml.scanner.ScannerError:
-            logger.exception("yaml scan error")
-            self._whole = {}
-        except Exception:
-            logger.exception("yaml parse error")
-            self._whole = {}
+            raise SamTemplateParseError(f"Failed to parse template: {filepath}") from e
+        except Exception as e:
+            logger.exception("Failed to process template file")
+            raise SamTemplateParseError(f"Failed to read template: {filepath}") from e
 
-        # Ensure _whole is not None
         if self._whole is None:
-            self._whole = {}
+            raise SamTemplateParseError(f"Template parsed to None: {filepath}")
 
         self._mappings = self._whole.get("Mappings", {})
         self._conditions = self._whole.get("Conditions", {})
