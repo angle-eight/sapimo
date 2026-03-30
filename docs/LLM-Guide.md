@@ -1,62 +1,154 @@
 # LLM Guide for Sapimo
 
-この文書は、Sapimo へ実装変更を入れる LLM/自動化エージェント向けの運用ルールです。
+この文書は、Sapimo の実装変更・機能追加を行う LLM / 自動化エージェントのための包括的ガイドです。
+この文書群を読めば、プロジェクト全体を理解し最短で作業に取りかかれることを目指しています。
 
-## 1. プロジェクトの前提
+---
 
-1. Sapimo はライブラリ配布 (`pip install`) 前提
-2. 利用先は別リポジトリであることが通常
-3. ランタイムは単一コンテナ (`sapimo` サービス)
-4. AWS モックは同一プロセスで管理（moto + mock_aws）
+## 1. Sapimo とは何か
 
-## 2. 不変条件（変更時に守ること）
+Sapimo は、AWS バックエンドのローカル開発環境を手軽に再現する Python CLI ライブラリです。
 
-1. 異常をフォールバックで隠蔽しない（fail-fast）
-2. `api_mock/docker/` 不在は異常として扱う
-3. `workspace/src` の存在を前提にしない
-4. 生成資産は `sapimo init` で再生成可能であること
-5. 互換性維持のためのデッドコードを増やさない
+**解決する課題**: AWS SAM や CDK でバックエンド開発をしているとき、ローカルで API を叩いて動作確認したい。
+**提供する価値**:
+- フロントエンド側はエンドポイント URL を切り替えるだけで、AWS にデプロイした時と同じ感覚で開発できる
+- 単一コンテナ設計による素早い起動と、コード変更時のホットリロード
+- S3・DynamoDB 等の AWS データをローカルファイルとして視認・編集できる
 
-## 3. 実行系の重要ファクト
+**配布形態**: `pip install sapimo` でインストールし、別リポジトリ（利用先プロジェクト）で使う。
 
-1. Compose は単一サービスのみ
-2. コンテナ起動 entrypoint は `api_mock/docker/gateway/main.py`
-3. `sapimo` パッケージ import は `api_mock/docker/sapimo` 同梱資産で解決する
-4. Compose project 名は CLI 内で一意化される（他リポジトリ衝突回避）
+---
 
-## 4. 主要コード位置
+## 2. 利用フロー全体像
 
-1. CLI: `src/sapimo/main.py`
-2. 単一 compose 生成: `src/sapimo/docker/single_compose_generator.py`
-3. Gateway template: `src/sapimo/docker/templates/gateway/main.py`
-4. Local Lambda runner: `src/sapimo/docker/local_lambda_runner.py`
-5. 単一コンテナ Dockerfile template: `src/sapimo/docker/templates/single/Dockerfile`
+```
+利用先プロジェクト/
+├── template.yaml (SAM) or cdk.out/*.template.json (CDK)
+├── lambda/                    ← Lambda 関数ソースコード
+│   ├── greeting/app.py
+│   └── users/app.py
+└── api_mock/                  ← sapimo init で生成される
+    ├── config.yaml            ← テンプレートから変換された設定
+    ├── app.py                 ← sapimo generate で生成。Mock 定義をここに書く
+    ├── docker-compose.yml     ← 単一コンテナ compose
+    ├── docker/                ← runtime 資産（テンプレート + sapimo パッケージ同梱）
+    │   ├── gateway/           ← FastAPI ゲートウェイ (main.py, mock_handler.py 等)
+    │   ├── single/            ← 単一コンテナ Dockerfile
+    │   ├── sapimo/            ← sapimo パッケージのコピー（コンテナ内 import 用）
+    │   └── ...
+    ├── s3/                    ← S3 バケットのローカルミラー（ファイルで確認可能）
+    ├── dynamodb/              ← DynamoDB テーブルのローカルミラー（JSON で確認可能）
+    ├── sqs/                   ← SQS キューのローカルミラー
+    └── log/
+```
 
-## 5. 変更時チェックリスト
+### CLI コマンド
 
-1. 外部プロジェクト利用前提を壊していないか
-2. ハードコードパスが `workspace/src` 依存になっていないか
-3. `sapimo init` 後に必要資産が揃うか
-4. CLI (`start/status/clean`) の挙動が一貫しているか
-5. 例外を握りつぶすフォールバックを追加していないか
+| コマンド | 動作 |
+|---------|------|
+| `sapimo init` | テンプレート解析 → `config.yaml` + `docker-compose.yml` + runtime 資産を `api_mock/` に生成 |
+| `sapimo init --template <file>` | 指定テンプレートから生成（`--cdk` で CDK CF 指定） |
+| `sapimo generate` | `config.yaml` から `app.py` に Mock 関数のひな形を追記 |
+| `sapimo start` | `api_mock/` で `docker compose up` を実行。`--build` `--detach` オプションあり |
+| `sapimo status` | コンテナ内の AWS モックデータ状況を表示 |
+| `sapimo clean` | AWS モックデータを削除（`--service s3,dynamodb` でサービス指定可能） |
 
-## 6. テスト実行の最低ライン
+---
 
-1. `python -m pytest tests/unit/test_single_compose_generator.py -q`
-2. `python -m pytest tests/unit/test_main_single_container_flow.py -q`
-3. `python -m pytest tests/unit -q`
+## 3. アーキテクチャ概要
 
-## 7. 典型障害と正しい対処
+### 単一コンテナ設計
 
-1. `ModuleNotFoundError: sapimo`
-   対処: runtime import 経路を確認。`api_mock/docker/sapimo` を前提に構成を修正。フォールバック追加は不可。
-2. `python: can't open file '/workspace/main.py'`
-   対処: bind mount で隠れない entrypoint を使う。
-3. `port is already allocated`
-   対処: 旧コンテナ残骸の可能性を確認。Compose project 衝突を避ける。
+```
+クライアント (localhost:8000)
+  ↓
+┌─────────────────────────────────────────────────────────┐
+│  sapimo コンテナ（単一プロセス）                            │
+│                                                         │
+│  FastAPI Gateway (main.py)                              │
+│    ├─ MockHandler: app.py を動的リロード (1秒間隔で監視)    │
+│    │   ├─ Mock 関数が値を返す → そのまま JSON レスポンス    │
+│    │   ├─ Mock 関数が None → Lambda 実行へフォールスルー    │
+│    │   ├─ Mock 関数が int → OpenAPI example を返却        │
+│    │   └─ Mock 関数が InputOverride → 入力変更して Lambda  │
+│    │                                                     │
+│    └─ LocalLambdaRunner: Lambda をインプロセス実行          │
+│        ├─ CodeUri + Layers → 一時的に sys.path に追加     │
+│        ├─ 環境変数を呼び出し単位で保存→適用→復元            │
+│        └─ handler(event, context) を実行                  │
+│                                                         │
+│  AWS Mock (moto + mock_aws)                             │
+│    ├─ S3Mock: ローカルファイル ↔ moto S3 双方向同期        │
+│    ├─ DynamoMock: data.json / results.csv ↔ moto DynamoDB│
+│    ├─ SqsMock: テキストファイル ↔ moto SQS               │
+│    ├─ SnsMock / SesMock: 初期化のみ                      │
+│    └─ 同期先: api_mock/{s3,dynamodb,sqs}/                │
+└─────────────────────────────────────────────────────────┘
+```
 
-## 8. ドキュメント更新ルール
+**設計の核心**:
+- moto の `mock_aws` は同一プロセスでのみ有効。だから単一コンテナ＋インプロセス実行が必須。
+- Lambda コードから `boto3.client("s3")` を呼ぶと、moto が透過的にモック応答する。
+- Lambda 実行後に moto ↔ ローカルファイルを同期することで、データ変更をファイルとして視認できる。
 
-1. 実装方針を変えたら `README.md` と `docs/Docker-Setup.md` を同時更新
-2. アーキテクチャ変更は `docs/Docker-Architecture.md` に反映
-3. LLM 向け前提が変わったらこの文書も更新
+---
+
+## 4. 詳細リファレンス
+
+以下のサブドキュメントで各領域の詳細を記載しています:
+
+| ドキュメント | 内容 |
+|------------|------|
+| [コードベースマップ](llm/codebase-map.md) | 全モジュールの責務・主要クラス・関数一覧 |
+| [config.yaml 仕様](llm/config-format.md) | 設定ファイルの構造・生成元・消費先 |
+| [Mock システム](llm/mock-system.md) | Mock Router / AWS Mock / データ同期の仕組み |
+| [開発ルール](llm/rules.md) | 不変条件・変更時チェックリスト・テスト要件 |
+
+---
+
+## 5. 実装変更時のクイックリファレンス
+
+### よくある変更パターンと関連ファイル
+
+| やりたいこと | 主に触るファイル |
+|------------|---------------|
+| CLI コマンドの追加・変更 | `src/sapimo/main.py` |
+| テンプレート解析ロジックの修正 | `src/sapimo/parser/sam_parser.py`, `cdk_parser.py`, `cf_resource_parser.py` |
+| config.yaml のフォーマット変更 | `src/sapimo/parser/config_parser.py`, `cf_resource_parser.py` |
+| Mock API デコレータの変更 | `src/sapimo/mock/api.py`, `src/sapimo/mock/__init__.py` |
+| Gateway のルーティング・リクエスト処理 | `src/sapimo/docker/templates/gateway/main.py` |
+| Mock 関数の動的リロード | `src/sapimo/docker/templates/gateway/mock_handler.py` |
+| Lambda 実行ロジック | `src/sapimo/docker/local_lambda_runner.py` |
+| AWS モック（S3/DynamoDB等）のデータ同期 | `src/sapimo/mock/mock_manager.py` |
+| Docker 環境固有のモック管理 | `src/sapimo/docker/mock_manager.py` |
+| docker-compose.yml の生成ロジック | `src/sapimo/docker/single_compose_generator.py` |
+| コンテナ内の Dockerfile | `src/sapimo/docker/templates/single/Dockerfile` |
+| OpenAPI example 返却 | `src/sapimo/docker/templates/gateway/openapi_example_resolver.py` |
+| 新しい AWS サービスモック追加 | `src/sapimo/mock/mock_manager.py` の `AwsMock` サブクラス追加 |
+
+### テスト実行
+
+```bash
+# 最低限（変更確認用）
+python -m pytest tests/unit -q
+
+# 個別実行
+python -m pytest tests/unit/test_single_compose_generator.py -q
+python -m pytest tests/unit/test_main_single_container_flow.py -q
+python -m pytest tests/unit/test_cf_resource_parser.py -q
+python -m pytest tests/unit/test_cdk_parser.py -q
+```
+
+---
+
+## 6. ドキュメント更新ルール
+
+| 変更の種類 | 更新が必要なドキュメント |
+|-----------|---------------------|
+| 実装方針の変更 | `README.md`, `docs/Docker-Setup.md` |
+| アーキテクチャ変更 | `docs/Docker-Architecture.md` |
+| モジュール構造の変更 | `docs/llm/codebase-map.md` |
+| config.yaml フォーマット変更 | `docs/llm/config-format.md` |
+| Mock 仕様の変更 | `docs/llm/mock-system.md` |
+| 不変条件・ルールの変更 | `docs/llm/rules.md` |
+| 上記全般 | この文書 (`docs/LLM-Guide.md`) |

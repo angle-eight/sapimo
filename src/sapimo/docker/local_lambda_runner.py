@@ -7,9 +7,13 @@ import importlib
 import inspect
 import os
 import sys
+import time
+import traceback
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
+from sapimo.docker.lambda_execution_logger import LambdaExecutionLogger
 
 
 class LocalLambdaRunner:
@@ -20,12 +24,16 @@ class LocalLambdaRunner:
         # In-process execution mutates os.environ and sys.path temporarily.
         # Serialize executions to avoid cross-request contamination.
         self._execution_lock = asyncio.Lock()
+        self._logger = LambdaExecutionLogger(
+            project_root / "api_mock" / "log"
+        )
 
     async def execute(
         self, route_info: dict[str, Any], event: dict[str, Any]
     ) -> dict[str, Any]:
         handler = route_info.get("handler", "app.lambda_handler")
         module_name, func_name = handler.rsplit(".", 1)
+        function_name = route_info.get("function_name", module_name)
 
         code_path = self._resolve_project_path(route_info.get("code_uri", "./"))
         layer_paths = [
@@ -39,6 +47,8 @@ class LocalLambdaRunner:
 
         env = self._build_lambda_environment(route_info)
 
+        log_file = self._logger.get_log_file(function_name, code_path, module_name)
+
         async with self._execution_lock:
             with self._temporary_environ(env), self._temporary_syspath(python_paths):
                 sys.modules.pop(module_name, None)
@@ -50,9 +60,32 @@ class LocalLambdaRunner:
                     )
 
                 handler_func = getattr(module, func_name)
-                result = handler_func(event, None)
-                if inspect.isawaitable(result):
-                    result = await result
+
+                start = time.perf_counter()
+                error_text = None
+                result = None
+                with self._logger.capture_stdout() as captured:
+                    try:
+                        result = handler_func(event, None)
+                        if inspect.isawaitable(result):
+                            result = await result
+                    except Exception:
+                        error_text = traceback.format_exc()
+                        raise
+                    finally:
+                        duration_ms = (time.perf_counter() - start) * 1000
+                        self._logger.log_execution(
+                            log_file=log_file,
+                            function_name=function_name,
+                            handler=handler,
+                            event=event,
+                            result=result if isinstance(result, dict) else (
+                                {"statusCode": 200, "body": result} if result is not None else None
+                            ),
+                            captured_output=captured.getvalue(),
+                            duration_ms=duration_ms,
+                            error=error_text,
+                        )
 
                 if isinstance(result, dict):
                     return result
