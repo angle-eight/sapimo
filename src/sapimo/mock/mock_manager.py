@@ -287,7 +287,7 @@ class SqsMock(AwsMock):
                 with open(queue_path / (str(i).zfill(4) + ".txt"), "w") as f:
                     f.write(body)
             self._last_messages[queue] = msgs
-            return {}  # FIXME
+        return {}
 
 
 class S3Mock(AwsMock):
@@ -415,7 +415,7 @@ class DynamoMock(AwsMock):
 
             if file.exists():
                 if file.stat().st_size < 4:  # skip if empty file
-                    print(f"{file.parent + file.name} is empty.")
+                    print(f"{file} is empty.")
                 else:
                     with open(file, "r") as f:
                         data = json.load(f, parse_float=Decimal)
@@ -432,7 +432,7 @@ class DynamoMock(AwsMock):
                     row = {col: d for col, d in zip(headers, self.read_record_csv(rec))}
                     data.append(row)
             else:
-                return
+                continue
 
             try:
                 with table.batch_writer() as batch:
@@ -502,13 +502,20 @@ class DynamoMock(AwsMock):
         changed_table = []
         for name in self._config.keys():
             table = self._dynamodb.Table(name)
-            items = table.scan().get("Items", [])
+            items = []
+            response = table.scan()
+            items.extend(response.get("Items", []))
+            while "LastEvaluatedKey" in response:
+                response = table.scan(
+                    ExclusiveStartKey=response["LastEvaluatedKey"]
+                )
+                items.extend(response.get("Items", []))
             file: Path = self._local_dynamo_path / name / "data.json"
             if len(items):
                 local = []
                 if file.exists():
                     with open(file, "r") as f:
-                        local = json.load(f)
+                        local = json.load(f, parse_float=Decimal)
 
                 if local != items:
                     changed_table.append(name)

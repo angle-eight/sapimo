@@ -1,4 +1,3 @@
-
 from copy import deepcopy
 from pathlib import Path
 
@@ -8,7 +7,7 @@ from sapimo.constants import EventType, AuthType
 from sapimo.exceptions import SamTemplateParseError, DockerFileParseError
 from sapimo.parser.image_info import ImageInfo
 
-logger =LogManager.setup_logger(__file__)
+logger = LogManager.setup_logger(__file__)
 
 
 class SamParser(CfResourceParser):
@@ -17,7 +16,7 @@ class SamParser(CfResourceParser):
 
     def _preprocess(self, filepath: Path, region: str):
         """
-            override: extract global settings and declare additional member
+        override: extract global settings and declare additional member
         """
         self._api_resources = {}
         self._http_api_resources = {}
@@ -35,7 +34,7 @@ class SamParser(CfResourceParser):
         self._lambdas = {}  # key: resource name
 
     def _classification(self, name: str, val: dict):
-        """ override: Pick "serverless.function" and treat event """
+        """override: Pick "serverless.function" and treat event"""
         props: dict = deepcopy(val.get("Properties", {}))
         if val["Type"] == "AWS::Serverless::Function":
             add_element(props, self._function_globals)
@@ -50,13 +49,14 @@ class SamParser(CfResourceParser):
                     props["Environment"]["Variables"] = image_info.envs
                 except DockerFileParseError as e:
                     logger.warning(e.message)
-                    msg += "sapimo: sapimo can't interpret your Dockerfile.\n"\
+                    msg += (
+                        "sapimo: sapimo can't interpret your Dockerfile.\n"
                         "you must edit api_mock/config.yaml"
+                    )
                     props["CodeUri"] = "edit here! (e.g. app/)"
                     props["Handler"] = "edit here! (e.g. app.lambda_handler)"
                     props["Environment"]["Variables"] = {"SAMPLE_ENV": "VAL"}
-                    props["Layers"] = [
-                        "if use outer dir, add here (e.g. /libs)"]
+                    props["Layers"] = ["if use outer dir, add here (e.g. /libs)"]
                     logger.warning(msg)
             events = props.pop("Events", {})
             if not events:
@@ -75,19 +75,19 @@ class SamParser(CfResourceParser):
                     props["AuthType"] = AuthType.NONE.name
                     if api_path and method:
                         if api_path in self._apis:
-                            self._apis[api_path][method] = {
-                                "Properties": props}
+                            self._apis[api_path][method] = {"Properties": props}
                         else:
-                            self._apis[api_path] = {
-                                method: {"Properties": props}}
+                            self._apis[api_path] = {method: {"Properties": props}}
                     api_id = event.get("Properties", {}).get("RestApiId", "")
                     if api_id:
                         api_rsc = self._api_resources.get(api_id, None)
                         api_rsc = self._treat(api_rsc)
                         if not api_rsc:
-                            msg = f"'{api_id}' Api resource"\
-                                f"( of function({name}) not found"\
+                            msg = (
+                                f"'{api_id}' Api resource"
+                                f"( of function({name}) not found"
                                 "this is ignored"
+                            )
                             logger.warning(msg)
                         auth = api_rsc.get("Properties", {}).get("Auth", None)
                         if not auth:
@@ -96,26 +96,23 @@ class SamParser(CfResourceParser):
                         if def_auth == "AWS_IAM":
                             props["AuthType"] = AuthType.AWS_IAM.name
                         elif def_auth:
-                            authorizer = auth.get("Authorizers", {})\
-                                .get(def_auth, {})
+                            authorizer = auth.get("Authorizers", {}).get(def_auth, {})
                             if "UserPoolArn" in authorizer:
-                                props["AuthType"] =\
-                                    AuthType.COGNITO_USER_POOLS.name
+                                props["AuthType"] = AuthType.COGNITO_USER_POOLS.name
                                 props["Authorizer"] = authorizer["UserPoolArn"]
                             elif "FunctionArn" in authorizer:
                                 tp = authorizer.get("FunctionPayloadType", "")
                                 if tp == "REQUEST":
-                                    props["AuthType"] =\
-                                        AuthType.CUSTOM_REQUEST.name
+                                    props["AuthType"] = AuthType.CUSTOM_REQUEST.name
                                 else:  # default=TOKEN
-                                    props["AuthType"] \
-                                        = AuthType.CUSTOM_TOKEN.name
-                                    props["AuthSource"] =\
-                                        authorizer.get("Identity")
+                                    props["AuthType"] = AuthType.CUSTOM_TOKEN.name
+                                    props["AuthSource"] = authorizer.get("Identity")
                                 props["Authorizer"] = authorizer["FunctionArn"]
                             else:
-                                msg = f"'{def_auth}'authorizer is invalid"\
+                                msg = (
+                                    f"'{def_auth}'authorizer is invalid"
                                     "auth settings is ignored"
+                                )
                                 logger.warning(msg)
 
                 elif event_type == "HttpApi":
@@ -127,11 +124,9 @@ class SamParser(CfResourceParser):
                     props["EventType"] = EventType.APIGW_V2.name
                     if api_path and method:
                         if api_path in self._apis:
-                            self._apis[api_path][method] = {
-                                "Properties": props}
+                            self._apis[api_path][method] = {"Properties": props}
                         else:
-                            self._apis[api_path] = {
-                                method: {"Properties": props}}
+                            self._apis[api_path] = {method: {"Properties": props}}
                         # set authtype
                         try:
                             props["AuthType"] = AuthType[auth_type].name
@@ -158,19 +153,19 @@ class SamParser(CfResourceParser):
             super()._classification(name, val)
 
     def _get_config_dict(self) -> dict:
-        """ override: add api paths """
+        """override: add api paths"""
         config = super()._get_config_dict()
         config["paths"] = self._apis
         if self._lambdas:
             config["lambdas"] = self._lambdas
-        # if self._triggered:
-        #     config["triggered"] = self._triggered
+        if self._triggered:
+            config["triggered"] = self._triggered
         return config
 
     def _get_ref_and_attr(self, name: str, resource: dict):
         """
-            override: for "AWS::Serverless::~~
-            retain api and httpAPI resources (for auth)
+        override: for "AWS::Serverless::~~
+        retain api and httpAPI resources (for auth)
         """
         tp = resource["Type"]
         props = resource["Properties"]
@@ -187,8 +182,10 @@ class SamParser(CfResourceParser):
             self._http_api_resources[name] = props
             return {"Ref": name}  # resource ip id
         elif tp == "AWS::Serverless::Application":
-            return {"Ref": name,  # stack resource name
-                    "Outputs.ApplicationOutputName": "dummyOutputName"}
+            return {
+                "Ref": name,  # stack resource name
+                "Outputs.ApplicationOutputName": "dummyOutputName",
+            }
         elif tp == "AWS::Serverless::LayerVersion":
             return {"Ref": props.get("ContentUri", name)}  # original
         elif tp == "AWS::Serverless::SimpleTable":
