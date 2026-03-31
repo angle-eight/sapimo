@@ -11,6 +11,7 @@ Sapimo の Mock システムは 2 層構造です:
 ### 概要
 
 ユーザーは `api_mock/app.py` にデコレータを使って Mock 関数を定義します。
+`MockRouter` は FastAPI の `APIRouter` サブクラスであり、パラメータ解決（パス・クエリ・ボディの型変換 + Pydantic バリデーション）は FastAPI に完全に委譲されます。
 Gateway の `MockHandler` が 1 秒間隔で `app.py` の変更を検知し、動的にリロードします。
 
 ### Mock 関数の戻り値による分岐
@@ -48,17 +49,34 @@ async def products():
     return 200  # swagger.yaml / openapi.yaml の example を返却
 ```
 
-### パスパラメータの型変換
+### パラメータ解決（FastAPI 委譲）
 
-Mock 関数のシグネチャにある型アノテーションは自動的に変換されます:
+Mock 関数のシグネチャは FastAPI の標準メカニズムで解決されます:
 
 ```python
+from pydantic import BaseModel
+
+class ItemCreate(BaseModel):
+    name: str
+    price: float
+
+# パスパラメータ: FastAPI が自動型変換
 @api.get("/users/{user_id}")
 async def get_user(user_id: int):  # ← str "123" → int 123 に自動変換
     ...
+
+# クエリパラメータ: FastAPI が自動抽出・型変換
+@api.get("/search")
+async def search(q: str, limit: int = 10):  # ← ?q=hello&limit=25
+    return {"results": [], "query": q, "limit": limit}
+
+# Pydantic ボディバリデーション: FastAPI が自動検証
+@api.post("/items")
+async def create_item(item: ItemCreate):  # ← JSON ボディを Pydantic モデルで検証
+    return {"name": item.name, "price": item.price}
 ```
 
-対応型: `int`, `float`, `bool`
+型不一致や必須パラメータ欠落時は FastAPI 標準の 422 エラーが返されます。
 
 ### `change_input` の仕組み
 

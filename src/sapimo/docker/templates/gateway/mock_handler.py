@@ -1,16 +1,19 @@
 """
 Mock Handler for Gateway
-api_mock/app.py の動的読み込みとMock処理
+api_mock/app.py の動的読み込みと Mock 処理
+
+MockRouter (FastAPI APIRouter サブクラス) にルート定義を委譲し、
+パラメータ解決は FastAPI の標準メカニズムを使用する。
 """
 
 import sys
 import importlib.util
 import asyncio
-import re
+import json
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
-from fastapi import Request, HTTPException
-import inspect
+from typing import Any, Optional
+from fastapi import FastAPI, Request, HTTPException
+from starlette.routing import Match
 import traceback
 
 from sapimo.utils import LogManager
@@ -22,63 +25,33 @@ class MockHandler:
     """Mock API 処理クラス"""
 
     def __init__(self):
-        self.mock_routes: Dict[str, Dict[str, Any]] = {}
+        self._mock_app: FastAPI | None = None
         self.app_py_path = Path("/workspace/api_mock/app.py")
         self.last_modified = None
         self._mock_module = None
 
-    def _find_route_match(
-        self, method: str, path: str
-    ) -> Tuple[Optional[str], Dict[str, str]]:
-        """
-        リクエストのメソッドとパスに一致するルートキーとパスパラメータを返す。
-        完全一致を優先し、次にパターンマッチを試みる。
-        Returns: (route_key or None, path_params dict)
-        """
-        exact_key = f"{method.upper()}:{path}"
-        if exact_key in self.mock_routes:
-            return exact_key, {}
-
-        for route_key, route_info in self.mock_routes.items():
-            parts = route_key.split(":", 1)
-            if len(parts) != 2:
-                continue
-            route_method, route_path = parts
-            if route_method != method.upper():
-                continue
-
-            param_names = re.findall(r"\{([^}]+)\}", route_path)
-            if not param_names:
-                continue
-
-            regex_pattern = route_path
-            for param_name in param_names:
-                regex_pattern = regex_pattern.replace(
-                    f"{{{param_name}}}", f"(?P<{param_name}>[^/]+)"
-                )
-            regex_pattern = f"^{regex_pattern}$"
-
-            m = re.match(regex_pattern, path)
-            if m:
-                return route_key, m.groupdict()
-
-        return None, {}
-
     def has_mock_definition(self, method: str, path: str) -> bool:
-        """指定されたメソッド・パスにMock定義があるかチェック（パターンマッチ対応）"""
-        route_key, _ = self._find_route_match(method, path)
-        return route_key is not None
+        """指定されたメソッド・パスに Mock 定義があるかチェック"""
+        if not self._mock_app:
+            return False
+
+        scope = {"type": "http", "path": path, "method": method.upper()}
+        for route in self._mock_app.routes:
+            match, _ = route.matches(scope)
+            if match == Match.FULL:
+                return True
+        return False
 
     def reload_mock_definitions(self) -> bool:
         """api_mock/app.py を動的リロード"""
         try:
             if not self.app_py_path.exists():
-                logger.debug("app.py not found, clearing mock routes")
-                self.mock_routes.clear()
+                logger.debug("app.py not found, clearing mock app")
+                self._mock_app = None
                 return False
 
             current_modified = self.app_py_path.stat().st_mtime
-            if self.last_modified == current_modified and self.mock_routes:
+            if self.last_modified == current_modified and self._mock_app is not None:
                 return True
 
             spec = importlib.util.spec_from_file_location("app_mock", self.app_py_path)
@@ -89,17 +62,22 @@ class MockHandler:
                     del sys.modules["app_mock"]
                 sys.modules["app_mock"] = self._mock_module
 
-                spec.loader.exec_module(self._mock_module)
-
                 from sapimo.mock.api import api as mock_router
 
-                self.mock_routes = mock_router.route_info.copy()
+                mock_router.clear_routes()
+
+                spec.loader.exec_module(self._mock_module)
+
+                # MockRouter のルートから内部 FastAPI アプリを構築
+                self._mock_app = FastAPI()
+                self._mock_app.include_router(mock_router)
 
                 self.last_modified = current_modified
-                logger.info(f"Loaded {len(self.mock_routes)} mock routes from app.py")
-
-                for route_key, route_info in self.mock_routes.items():
-                    logger.debug(f"  {route_key} -> {route_info['function'].__name__}")
+                route_count = len(mock_router.routes)
+                logger.info(f"Loaded {route_count} mock routes from app.py")
+                for route in mock_router.routes:
+                    if hasattr(route, "methods") and hasattr(route, "path"):
+                        logger.debug(f"  {route.methods} {route.path}")
 
                 return True
 
@@ -113,29 +91,36 @@ class MockHandler:
     async def handle_mock_request(
         self, method: str, path: str, request: Request
     ) -> Optional[Any]:
-        """Mock リクエストを処理"""
-        route_key, path_params = self._find_route_match(method, path)
-
-        if route_key is None:
+        """Mock リクエストを処理。FastAPI のパラメータ解決を経由して Mock 関数を呼び出す。"""
+        if not self._mock_app:
             return None
 
-        route_info = self.mock_routes[route_key]
-        mock_func = route_info["function"]
-        signature = route_info["signature"]
+        from sapimo.mock.api import api as mock_router
+
+        mock_router._captured_result = type(mock_router)._UNSET_SENTINEL
+
+        # 元リクエストのボディをキャッシュ（複数回読み取り対応）
+        body = await request.body()
+
+        # ASGI scope を構築
+        scope = dict(request.scope)
+        scope.pop("path_params", None)
+
+        response_status = None
+        response_body = b""
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        async def send(message):
+            nonlocal response_status, response_body
+            if message["type"] == "http.response.start":
+                response_status = message["status"]
+            elif message["type"] == "http.response.body":
+                response_body += message.get("body", b"")
 
         try:
-            params = await self._prepare_parameters(
-                signature, path, request, path_params=path_params
-            )
-
-            if asyncio.iscoroutinefunction(mock_func):
-                result = await mock_func(**params)
-            else:
-                result = mock_func(**params)
-
-            logger.debug(f"Mock function returned: {type(result)} {result}")
-            return result
-
+            await self._mock_app(scope, receive, send)
         except Exception as e:
             logger.error(f"Mock function execution failed: {e}")
             logger.debug(traceback.format_exc())
@@ -143,40 +128,19 @@ class MockHandler:
                 status_code=500, detail=f"Mock execution error: {str(e)}"
             )
 
-    async def _prepare_parameters(
-        self,
-        signature: inspect.Signature,
-        path: str,
-        request: Request,
-        path_params: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
-        """Mock関数のパラメータを準備"""
-        params = {}
+        # FastAPI バリデーションエラー等をそのまま伝播
+        if response_status is not None and response_status >= 400:
+            try:
+                error_body = json.loads(response_body)
+                detail = error_body.get("detail", error_body)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                detail = f"Mock error (status {response_status})"
+            raise HTTPException(status_code=response_status, detail=detail)
 
-        if path_params is None:
-            path_params = {}
-
-        for param_name, param in signature.parameters.items():
-            if param_name == "request":
-                params[param_name] = request
-            elif param_name in path_params:
-                value = path_params[param_name]
-                if param.annotation != inspect.Parameter.empty:
-                    try:
-                        if param.annotation is int:
-                            value = int(value)
-                        elif param.annotation is float:
-                            value = float(value)
-                        elif param.annotation is bool:
-                            value = value.lower() in ("true", "1", "yes")
-                    except (ValueError, TypeError) as e:
-                        raise HTTPException(
-                            status_code=422,
-                            detail=f"Invalid type for parameter {param_name}: {e}",
-                        )
-                params[param_name] = value
-
-        return params
+        captured, result = mock_router.get_captured_result()
+        if not captured:
+            return None
+        return result
 
     def start_file_watcher(self):
         """ファイル監視を開始"""

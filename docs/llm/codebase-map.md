@@ -157,7 +157,7 @@ async def modified():
 
 | クラス/関数 | 責務 |
 |-----------|------|
-| `MockRouter` (グローバル `api`) | デコレータでルート定義を収集。`routes` / `route_info` に保持 |
+| `MockRouter` (グローバル `api`) | FastAPI `APIRouter` サブクラス。デコレータでルート定義を収集。パラメータ解決は FastAPI に完全委譲（Pydantic バリデーション対応）。戻り値をキャプチャして Gateway が解釈 |
 | `InputOverride` | `change_input()` の戻り値。Lambda 呼び出し時に event を部分上書き |
 | `MockOptions` (グローバル `options`) | `mode` (`"api"` / `"mock"`) の切り替え |
 
@@ -219,7 +219,9 @@ Gateway から呼ばれ、Lambda handler を同一プロセスで実行する。
 | メソッド | 責務 |
 |---------|------|
 | `__init__` | config.yaml 読み込み、ルーティング構築、MockHandler/LocalLambdaRunner 初期化 |
-| `unified_router` | 全 HTTP リクエストのハンドラ。Mock → Lambda の順で処理 |
+| `_setup_routes` | config.yaml から個別 FastAPI ルートを自動登録。/docs で Swagger UI 一覧表示。タグ自動グルーピング |
+| `_create_route_handler` | 個別ルート用 async handler をクロージャで生成 |
+| `_handle_request` | Mock → Lambda の共通処理パイプライン |
 | `_invoke_lambda` | LocalLambdaRunner 経由で Lambda を実行 |
 | `_build_lambda_event` | HTTP リクエスト → API Gateway v2 イベント形式に変換 |
 | `_build_authorizer_context` | JWT/IAM の authorizer context を構築（**検証なし**、claims 注入のみ） |
@@ -231,9 +233,9 @@ Gateway から呼ばれ、Lambda handler を同一プロセスで実行する。
 
 | メソッド | 責務 |
 |---------|------|
-| `reload_mock_definitions()` | `app.py` を `importlib` で動的にリロード。`st_mtime` で変更検知 |
-| `has_mock_definition(method, path)` | 指定パスに Mock 定義があるか判定（パターンマッチ対応） |
-| `handle_mock_request(method, path, request)` | Mock 関数を実行。パスパラメータの型変換も実施 |
+| `reload_mock_definitions()` | `app.py` を `importlib` で動的にリロード。`st_mtime` で変更検知。MockRouter のルートから内部 FastAPI アプリを構築 |
+| `has_mock_definition(method, path)` | Starlette の `route.matches()` で Mock 定義の有無を判定 |
+| `handle_mock_request(method, path, request)` | ASGI 経由で Mock 関数を実行。FastAPI のパラメータ解決を経由し、キャプチャされた生の戻り値を返す |
 | `start_file_watcher()` | 1秒間隔で `app.py` の変更を監視する非同期タスクを起動 |
 
 #### `docker/templates/gateway/openapi_example_resolver.py`
@@ -255,13 +257,14 @@ tests/unit/
 ├── test_cognito_mock.py                  # CognitoMock / プレースホルダー解決のテスト
 ├── test_compose_generator_docker_setup.py # DockerComposeGenerator のテスト
 ├── test_gateway_change_input_compat.py   # InputOverride 互換テスト
+├── test_gateway_docs_routes.py           # 個別ルート登録・/docs ・ OpenAPI スキーマテスト
 ├── test_gateway_jwt_authorizer_passthrough.py # JWT passthrough テスト
 ├── test_gateway_openapi_example.py       # OpenAPI example 返却テスト
 ├── test_gateway_options_mode.py          # Options mode テスト
 ├── test_image_info.py                    # Dockerfile 解析テスト
 ├── test_local_lambda_runner.py           # LocalLambdaRunner テスト
 ├── test_main_single_container_flow.py    # CLI + 単一コンテナフローテスト
-├── test_mock_handler_path_params.py      # パスパラメータ処理テスト
+├── test_mock_handler_path_params.py      # MockRouter パラメータ解決テスト（FastAPI 委譲）
 ├── test_mock_package_import.py           # Mock パッケージ import テスト
 └── test_single_compose_generator.py      # SingleContainerComposeGenerator テスト
 ```

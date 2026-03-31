@@ -1,6 +1,8 @@
 from typing import Optional
 from pathlib import Path
 import logging
+import shutil
+import subprocess
 import sys
 import os
 from datetime import datetime
@@ -163,3 +165,37 @@ def dget(src: dict, keys: list[str]):
         if isinstance(d, dict):
             d = d.get(key, {})
     return d
+
+
+def force_rmtree(path: Path) -> None:
+    """Dockerコンテナが作成したroot所有ファイルを含むディレクトリツリーを削除する。
+
+    通常の shutil.rmtree が PermissionError で失敗した場合、
+    Docker経由でroot権限でファイルを削除する。
+    """
+    try:
+        shutil.rmtree(path)
+    except PermissionError:
+        abs_path = str(path.resolve())
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{abs_path}:/target:rw",
+                "alpine",
+                "find",
+                "/target",
+                "-mindepth",
+                "1",
+                "-delete",
+            ],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            raise PermissionError(
+                f"Cannot remove {path}: contains root-owned files from Docker. "
+                f"Run 'sudo rm -rf {abs_path}' manually."
+            )
+        path.rmdir()

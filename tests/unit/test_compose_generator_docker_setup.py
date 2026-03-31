@@ -43,7 +43,7 @@ def test_ensure_docker_templates_copies_runtime_assets(tmp_path):
         encoding="utf-8"
     )
     assert "reload_mock_definitions" in gateway_handler
-    assert "_find_route_match" in gateway_handler
+    assert "has_mock_definition" in gateway_handler
 
     aws_mock_dockerfile = (docker_root / "aws_mock" / "Dockerfile").read_text(
         encoding="utf-8"

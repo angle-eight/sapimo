@@ -1,18 +1,20 @@
 """
 Mock API デコレータモジュール
-FastAPI風のデコレータでMock定義を可能にする
+FastAPI APIRouter のサブクラスで Mock 定義を可能にする
 """
 
 from typing import Dict, Callable, Any
 import inspect
+import asyncio
 from functools import wraps
+
+from fastapi import APIRouter
 
 
 class InputOverride:
     """入力値すり替え用のマーカークラス"""
 
     def __init__(self, data: Dict[str, Any] | None = None, **kwargs: Any):
-        # 旧実装互換: InputOverride(path=..., body=...) のキーワード指定を許容
         if data is None:
             data = {}
         elif not isinstance(data, dict):
@@ -24,61 +26,63 @@ class InputOverride:
         self.data = data
 
 
-class MockRouter:
-    """Mock API ルーター"""
+class MockRouter(APIRouter):
+    """FastAPI APIRouter ベースの Mock ルーター
+
+    ルート登録は FastAPI の標準メカニズムを使用し、
+    パラメータ解決（パス・クエリ・ボディの型変換 + Pydantic バリデーション）
+    を FastAPI に完全委譲する。
+    Mock 関数の生の戻り値はキャプチャされ、Gateway が解釈する。
+    """
+
+    _UNSET_SENTINEL = object()
 
     def __init__(self):
-        self.routes: Dict[str, Callable] = {}
-        self.route_info: Dict[str, Dict] = {}
+        super().__init__()
+        self._captured_result: Any = self._UNSET_SENTINEL
 
-    def get(self, path: str):
-        """GETエンドポイント定義デコレータ"""
-        return self._create_decorator("GET", path)
+    def add_api_route(self, path: str, endpoint: Callable, **kwargs) -> None:
+        """エンドポイントをラップして戻り値キャプチャを挟む"""
+        wrapped = self._wrap_endpoint(endpoint)
+        super().add_api_route(path, wrapped, **kwargs)
 
-    def post(self, path: str):
-        """POSTエンドポイント定義デコレータ"""
-        return self._create_decorator("POST", path)
+    def _wrap_endpoint(self, func: Callable) -> Callable:
+        """Mock 関数をラップし、戻り値をキャプチャする"""
+        router = self
 
-    def put(self, path: str):
-        """PUTエンドポイント定義デコレータ"""
-        return self._create_decorator("PUT", path)
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            if asyncio.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+            router._captured_result = result
+            # FastAPI のレスポンスシリアライズに安全な値を返す
+            if result is None or isinstance(result, (dict, list, str, float, bool)):
+                return result
+            if isinstance(result, int):
+                return result
+            return {}  # InputOverride 等のシリアライズ不可型
 
-    def delete(self, path: str):
-        """DELETEエンドポイント定義デコレータ"""
-        return self._create_decorator("DELETE", path)
+        wrapper.__signature__ = inspect.signature(func)
+        return wrapper
 
-    def patch(self, path: str):
-        """PATCHエンドポイント定義デコレータ"""
-        return self._create_decorator("PATCH", path)
+    def get_captured_result(self) -> tuple[bool, Any]:
+        """直近の Mock 呼び出し結果を取得しリセットする。
 
-    def _create_decorator(self, method: str, path: str):
-        """デコレータ生成"""
-
-        def decorator(func: Callable):
-            route_key = f"{method}:{path}"
-
-            # 関数のシグネチャを保存（pydanticバリデーション用）
-            sig = inspect.signature(func)
-            self.route_info[route_key] = {
-                "function": func,
-                "signature": sig,
-                "method": method,
-                "path": path,
-            }
-
-            @wraps(func)
-            async def wrapper(*args, **kwargs):
-                return await func(*args, **kwargs)
-
-            self.routes[route_key] = wrapper
-            return wrapper
-
-        return decorator
+        Returns:
+            (captured, result): captured=False なら Mock 関数は呼ばれなかった
+        """
+        if self._captured_result is self._UNSET_SENTINEL:
+            return False, None
+        result = self._captured_result
+        self._captured_result = self._UNSET_SENTINEL
+        return True, result
 
     def clear_routes(self):
         """ルート定義をクリア（リロード用）"""
         self.routes.clear()
-        self.route_info.clear()
+        self._captured_result = self._UNSET_SENTINEL
 
 
 # グローバルインスタンス

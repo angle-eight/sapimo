@@ -5,7 +5,7 @@ from typing import Any
 import shutil
 import yaml
 
-from sapimo.utils import LogManager
+from sapimo.utils import LogManager, force_rmtree
 
 logger = LogManager.setup_logger(__file__)
 
@@ -22,7 +22,7 @@ class SingleContainerComposeGenerator:
         target_root = self.output_path.parent / "docker"
 
         if target_root.exists():
-            shutil.rmtree(target_root)
+            force_rmtree(target_root)
 
         shutil.copytree(templates_root, target_root)
         self._copy_runtime_sapimo_package(target_root)
@@ -34,7 +34,7 @@ class SingleContainerComposeGenerator:
         target_dir = target_root / "sapimo"
 
         if target_dir.exists():
-            shutil.rmtree(target_dir)
+            force_rmtree(target_dir)
 
         shutil.copytree(
             source_dir,
