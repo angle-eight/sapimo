@@ -33,6 +33,68 @@ sapimo start
 
 ---
 
+# Swagger APIドキュメント
+
+起動後、ブラウザで以下のURLにアクセスすると、登録済みの全エンドポイントをSwagger UIで確認できます。
+
+```
+http://localhost:8000/docs
+```
+
+- `config.yaml` に定義されたルートが自動で一覧表示されます
+- パスの先頭セグメント（例: `/users/{id}` → `users`）でタグ別にグルーピングされます
+- **Try it out** ボタンから直接リクエストを送信してテストできます
+
+OpenAPI JSON は `http://localhost:8000/openapi.json` で取得できます。
+
+## リクエスト/レスポンス型の表示
+
+`api_mock/swagger.yaml` または `api_mock/openapi.yaml` が存在する場合、
+定義されている requestBody / responses / schemas が Swagger UI に自動マージされます。
+
+```yaml
+# api_mock/swagger.yaml の例
+paths:
+  /users:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '200':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+components:
+  schemas:
+    CreateUserRequest:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+```
+
+> この OpenAPI spec は [example 返却機能](#4-openapi-exampleを返す) と共用です。
+> 一つのファイルで型情報と example の両方を管理できます。
+
+---
+
 # APIモックの編集
 
 `api_mock/app.py` を編集することで、Lambdaコードを書き換えずにAPI挙動を制御できます。

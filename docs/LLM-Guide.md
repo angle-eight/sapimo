@@ -66,7 +66,14 @@ Sapimo は、AWS バックエンドのローカル開発環境を手軽に再現
 │  sapimo コンテナ（単一プロセス）                            │
 │                                                         │
 │  FastAPI Gateway (main.py)                              │
+│    ├─ /docs: Swagger UI（全ルート自動一覧）               │
+│    ├─ 個別ルート登録: config.yaml から自動生成             │
+│    │   └─ タグ自動グルーピング（パスプレフィックス別）       │
+│    │                                                     │
 │    ├─ MockHandler: app.py を動的リロード (1秒間隔で監視)    │
+│    │   ├─ MockRouter (FastAPI APIRouter サブクラス)        │
+│    │   │   └─ パラメータ解決は FastAPI に完全委譲           │
+│    │   │      (パス・クエリ・Pydantic ボディバリデーション)  │
 │    │   ├─ Mock 関数が値を返す → そのまま JSON レスポンス    │
 │    │   ├─ Mock 関数が None → Lambda 実行へフォールスルー    │
 │    │   ├─ Mock 関数が int → OpenAPI example を返却        │

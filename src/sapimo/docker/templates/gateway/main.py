@@ -6,8 +6,11 @@ Lambda コンテナとのルーティング・連携を処理
 
 import os
 from pathlib import Path
+from typing import Any
+
 import httpx
 from jose import jwt
+from pydantic import BaseModel
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +24,14 @@ from sapimo.docker.local_lambda_runner import LocalLambdaRunner
 from sapimo.utils import LogManager
 
 logger = LogManager.setup_logger(__file__)
+
+
+class LambdaResponse(BaseModel):
+    """Lambda 関数の標準レスポンス形式"""
+
+    statusCode: int = 200
+    body: Any = None
+    headers: dict[str, str] | None = None
 
 
 class LambdaGateway:
@@ -45,6 +56,7 @@ class LambdaGateway:
         self._setup_middleware()
         self._load_configuration()
         self._setup_routes()
+        self._setup_openapi_schema_merge()
 
         if self.single_container_mode:
             self.local_lambda_runner = LocalLambdaRunner(self.project_root)
@@ -164,7 +176,7 @@ class LambdaGateway:
     def _setup_routes(self):
         """動的ルーティングの設定"""
 
-        @self.app.get("/health")
+        @self.app.get("/health", tags=["system"])
         async def health_check():
             """ヘルスチェック"""
             return {
@@ -174,72 +186,164 @@ class LambdaGateway:
                 "containers": list(self.lambda_containers.values()),
             }
 
-        @self.app.get("/routes")
+        @self.app.get("/routes", tags=["system"])
         async def list_routes():
             """ルーティング一覧"""
             return {"routes": self.lambda_routes, "containers": self.lambda_containers}
 
+        # config.yaml の各エンドポイントを個別 FastAPI ルートとして登録
+        for route_key, route_info in self.lambda_routes.items():
+            handler = self._create_route_handler(route_info)
+            tag = self._extract_tag(route_info["path"])
+            self.app.add_api_route(
+                route_info["path"],
+                handler,
+                methods=[route_info["method"]],
+                summary=route_info["function_name"],
+                description=(
+                    f"Handler: {route_info['handler']}\n"
+                    f"CodeUri: {route_info['code_uri']}\n"
+                    f"AuthType: {route_info.get('auth_type', 'NONE')}"
+                ),
+                tags=[tag],
+                response_model=LambdaResponse,
+            )
+
+        # 未登録ルート用 catch-all フォールバック
         @self.app.api_route(
-            "/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+            "/{path:path}",
+            methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+            include_in_schema=False,
         )
-        async def unified_router(path: str, request: Request):
-            """統合ルーター: Mock → Lambda の順で処理"""
+        async def fallback_router(path: str, request: Request):
+            """未登録ルートのフォールバック"""
             method = request.method
-
-            if self.mock_handler.has_mock_definition(method, f"/{path}"):
-                try:
-                    mock_result = await self.mock_handler.handle_mock_request(
-                        method, f"/{path}", request
-                    )
-
-                    if mock_result is None:
-                        pass
-                    elif isinstance(mock_result, InputOverride):
-                        return await self._invoke_lambda_with_override(
-                            mock_result, method, path, request
-                        )
-                    elif isinstance(mock_result, (dict, str, list)):
-                        return JSONResponse(content=mock_result)
-                    elif isinstance(mock_result, int) and 200 <= mock_result < 600:
-                        from openapi_example_resolver import resolve_example
-
-                        api_path = f"/{path}"
-                        example_content, resolved_status = resolve_example(
-                            api_path, method, mock_result
-                        )
-                        if example_content is not None:
-                            return JSONResponse(
-                                content=example_content,
-                                status_code=resolved_status,
-                            )
-                        else:
-                            return JSONResponse(
-                                content=None,
-                                status_code=mock_result,
-                            )
-                    else:
-                        return JSONResponse(content=mock_result)
-
-                except Exception as e:
-                    raise HTTPException(
-                        status_code=500, detail=f"Mock processing error: {str(e)}"
-                    )
-
-            if options.mode == "mock":
-                return JSONResponse(
-                    content={"message": "Default mock response"},
-                    status_code=options.default_status,
-                )
-
             matched_route = self._find_matching_route(method, path)
-
             if not matched_route:
+                if options.mode == "mock":
+                    return JSONResponse(
+                        content={"message": "Default mock response"},
+                        status_code=options.default_status,
+                    )
                 raise HTTPException(
                     status_code=404,
                     detail=f"No Lambda function found for {method} /{path}",
                 )
+            return await self._handle_request(matched_route, method, path, request)
 
-            return await self._invoke_lambda(matched_route, request, path)
+    def _extract_tag(self, path: str) -> str:
+        """パスの第1セグメントをタグとして抽出"""
+        segments = [s for s in path.split("/") if s and not s.startswith("{")]
+        return segments[0] if segments else "root"
+
+    def _setup_openapi_schema_merge(self):
+        """ユーザー提供の OpenAPI spec があれば、自動生成スキーマにマージする"""
+        from openapi_example_resolver import _load_spec
+
+        user_spec = _load_spec()
+        if user_spec is None:
+            return
+
+        user_paths = user_spec.get("paths", {})
+        user_schemas = user_spec.get("components", {}).get("schemas", {})
+        if not user_paths and not user_schemas:
+            return
+
+        original_openapi = self.app.openapi
+
+        def merged_openapi():
+            schema = original_openapi()
+
+            # パスごとのリクエスト/レスポンス定義をマージ
+            for path, methods in user_paths.items():
+                if path not in schema.get("paths", {}):
+                    continue
+                for method, operation in methods.items():
+                    method_lower = method.lower()
+                    if method_lower not in schema["paths"][path]:
+                        continue
+                    target = schema["paths"][path][method_lower]
+                    if "requestBody" in operation:
+                        target["requestBody"] = operation["requestBody"]
+                    if "parameters" in operation:
+                        target["parameters"] = operation["parameters"]
+                    if "responses" in operation:
+                        target["responses"] = operation["responses"]
+
+            # components/schemas をマージ
+            if user_schemas:
+                schema.setdefault("components", {}).setdefault("schemas", {}).update(
+                    user_schemas
+                )
+
+            return schema
+
+        self.app.openapi = merged_openapi
+        logger.info(
+            "Merged user OpenAPI spec into schema (%d paths, %d schemas)",
+            len(user_paths),
+            len(user_schemas),
+        )
+
+    def _create_route_handler(self, route_info: dict):
+        """個別ルート用のハンドラを生成"""
+
+        async def handler(request: Request):
+            path = route_info["path"].lstrip("/")
+            return await self._handle_request(route_info, request.method, path, request)
+
+        return handler
+
+    async def _handle_request(
+        self, route_info: dict, method: str, path: str, request: Request
+    ):
+        """Mock → Lambda の共通処理パイプライン"""
+        if self.mock_handler.has_mock_definition(method, f"/{path}"):
+            try:
+                mock_result = await self.mock_handler.handle_mock_request(
+                    method, f"/{path}", request
+                )
+
+                if mock_result is None:
+                    pass
+                elif isinstance(mock_result, InputOverride):
+                    return await self._invoke_lambda_with_override(
+                        mock_result, method, path, request
+                    )
+                elif isinstance(mock_result, (dict, str, list)):
+                    return JSONResponse(content=mock_result)
+                elif isinstance(mock_result, int) and 200 <= mock_result < 600:
+                    from openapi_example_resolver import resolve_example
+
+                    api_path = f"/{path}"
+                    example_content, resolved_status = resolve_example(
+                        api_path, method, mock_result
+                    )
+                    if example_content is not None:
+                        return JSONResponse(
+                            content=example_content,
+                            status_code=resolved_status,
+                        )
+                    else:
+                        return JSONResponse(
+                            content=None,
+                            status_code=mock_result,
+                        )
+                else:
+                    return JSONResponse(content=mock_result)
+
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, detail=f"Mock processing error: {str(e)}"
+                )
+
+        if options.mode == "mock":
+            return JSONResponse(
+                content={"message": "Default mock response"},
+                status_code=options.default_status,
+            )
+
+        return await self._invoke_lambda(route_info, request, path)
 
     def _find_matching_route(self, method: str, path: str) -> dict:
         """パスパターンマッチングでルートを検索"""
