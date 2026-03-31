@@ -4,6 +4,7 @@ FastAPI Gateway メインアプリケーション
 Lambda コンテナとのルーティング・連携を処理
 """
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ import httpx
 from jose import jwt
 from pydantic import BaseModel
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import yaml
@@ -172,6 +173,23 @@ class LambdaGateway:
         sanitized = re.sub(r"[^a-zA-Z0-9\-]", "-", name.lower())
         sanitized = re.sub(r"-+", "-", sanitized)
         return sanitized.strip("-")
+
+    @staticmethod
+    def _build_lambda_response(lambda_result: dict) -> Response:
+        """Lambda の戻り値から HTTP レスポンスを構築する。
+
+        Lambda は body を JSON 文字列で返すことが多い。
+        そのまま JSONResponse に渡すと二重エンコードされるため、
+        文字列なら json.loads してから返す。
+        """
+        status = lambda_result.get("statusCode", 200)
+        body = lambda_result.get("body", lambda_result)
+        if not isinstance(body, dict):
+            try:
+                body = json.loads(body)
+            except (json.JSONDecodeError, TypeError):
+                return Response(status_code=status, content=str(body))
+        return JSONResponse(status_code=status, content=body)
 
     def _setup_routes(self):
         """動的ルーティングの設定"""
@@ -385,10 +403,7 @@ class LambdaGateway:
                 lambda_result = await self.local_lambda_runner.execute(
                     route_info, event
                 )
-                return JSONResponse(
-                    content=lambda_result.get("body", lambda_result),
-                    status_code=lambda_result.get("statusCode", 200),
-                )
+                return self._build_lambda_response(lambda_result)
 
             lambda_url = f"http://{container_name}:8080/2015-03-31/functions/function/invocations"
 
@@ -397,10 +412,7 @@ class LambdaGateway:
 
                 if response.status_code == 200:
                     lambda_result = response.json()
-                    return JSONResponse(
-                        content=lambda_result.get("body", lambda_result),
-                        status_code=lambda_result.get("statusCode", 200),
-                    )
+                    return self._build_lambda_response(lambda_result)
                 else:
                     logger.error(
                         "Lambda invocation returned non-200: function=%s container=%s method=%s path=/%s url=%s status=%s response=%s",
@@ -483,10 +495,7 @@ class LambdaGateway:
                 lambda_result = await self.local_lambda_runner.execute(
                     matched_route, original_event
                 )
-                return JSONResponse(
-                    content=lambda_result.get("body", lambda_result),
-                    status_code=lambda_result.get("statusCode", 200),
-                )
+                return self._build_lambda_response(lambda_result)
 
             lambda_url = f"http://{container_name}:8080/2015-03-31/functions/function/invocations"
 
@@ -497,10 +506,7 @@ class LambdaGateway:
 
                 if response.status_code == 200:
                     lambda_result = response.json()
-                    return JSONResponse(
-                        content=lambda_result.get("body", lambda_result),
-                        status_code=lambda_result.get("statusCode", 200),
-                    )
+                    return self._build_lambda_response(lambda_result)
                 else:
                     logger.error(
                         "Lambda invocation returned non-200 with override: function=%s container=%s method=%s path=/%s url=%s status=%s response=%s",
