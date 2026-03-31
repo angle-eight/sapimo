@@ -4,8 +4,10 @@ FastAPI Gateway メインアプリケーション
 Lambda コンテナとのルーティング・連携を処理
 """
 
+import datetime
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +53,8 @@ class LambdaGateway:
         )
         self.lambda_routes: dict[str, dict] = {}
         self.lambda_containers: dict[str, str] = {}
+        self.authorizer_lambdas: dict[str, dict] = {}
+        self.triggered_lambdas: dict[str, dict] = {}
 
         self.mock_handler = MockHandler()
 
@@ -137,6 +141,8 @@ class LambdaGateway:
                     if func_name.startswith("_"):
                         func_name = func_name[1:]
 
+                    event_type = properties.get("EventType", "APIGW_V2")
+
                     route_key = f"{method.upper()}:{path}"
                     self.lambda_routes[route_key] = {
                         "function_name": func_name,
@@ -149,6 +155,7 @@ class LambdaGateway:
                         "runtime": properties.get("Runtime", "python3.9"),
                         "method": method.upper(),
                         "path": path,
+                        "event_type": event_type,
                         "auth_type": auth_type,
                         "authorizer": authorizer,
                         "auth_source": auth_source,
@@ -156,6 +163,30 @@ class LambdaGateway:
 
                     container_name = f"lambda-{self._sanitize_service_name(func_name)}"
                     self.lambda_containers[func_name] = container_name
+
+            # Load authorizer Lambda configs
+            for name, lambda_config in config.get("lambdas", {}).items():
+                props = lambda_config.get("Properties", {})
+                self.authorizer_lambdas[name] = {
+                    "function_name": name,
+                    "handler": props.get("Handler", "app.lambda_handler"),
+                    "code_uri": props.get("CodeUri", "./"),
+                    "environment": props.get("Environment", {}).get("Variables", {}),
+                    "layers": props.get("Layers", []),
+                    "runtime": props.get("Runtime", "python3.9"),
+                }
+
+            # Load S3 trigger Lambda configs
+            for bucket, trigger_config in config.get("triggered", {}).items():
+                props = trigger_config.get("Properties", {})
+                self.triggered_lambdas[bucket] = {
+                    "function_name": f"triggered_{bucket}",
+                    "handler": props.get("Handler", "app.lambda_handler"),
+                    "code_uri": props.get("CodeUri", "./"),
+                    "environment": props.get("Environment", {}).get("Variables", {}),
+                    "layers": props.get("Layers", []),
+                    "runtime": props.get("Runtime", "python3.9"),
+                }
 
             logger.info(f"Loaded {len(self.lambda_routes)} Lambda routes")
             for route, info in self.lambda_routes.items():
@@ -457,6 +488,7 @@ class LambdaGateway:
             if self.single_container_mode and self.mock_manager:
                 try:
                     self.mock_manager.sync()
+                    await self._process_s3_triggers()
                 except Exception:
                     logger.exception("Failed to sync in-process mock data")
 
@@ -551,64 +583,232 @@ class LambdaGateway:
             if self.single_container_mode and self.mock_manager:
                 try:
                     self.mock_manager.sync()
+                    await self._process_s3_triggers()
                 except Exception:
                     logger.exception("Failed to sync in-process mock data")
 
     async def _build_lambda_event(self, request: Request, path: str, route_info: dict):
-        """AWS Lambda event オブジェクトを構築"""
+        """AWS Lambda event オブジェクトを構築。
+
+        config の EventType に応じて v1 (APIGW) / v2 (APIGW_V2) 形式を生成する。
+        """
         body = await request.body()
+        body_str = body.decode() if body else None
 
         query_params = dict(request.query_params)
 
-        headers = dict(request.headers)
+        # Headers を Capitalize 正規化 (content-type → Content-Type)
+        raw_headers = dict(request.headers)
+        headers = {}
+        multi_value_headers = {}
+        for key, value in raw_headers.items():
+            normalized = "-".join(w.capitalize() for w in key.split("-"))
+            headers[normalized] = value
+            multi_value_headers[normalized] = [value]
+
+        # multiValueQueryStringParameters
+        multi_value_query = {}
+        for key, value in request.query_params.items():
+            multi_value_query[key] = [value]
 
         path_params = self._extract_path_params(route_info["path"], f"/{path}")
 
-        event = {
-            "version": "2.0",
-            "routeKey": f"{request.method} {route_info['path']}",
-            "rawPath": f"/{path}",
-            "rawQueryString": str(request.url.query),
-            "headers": headers,
-            "queryStringParameters": query_params,
-            "pathParameters": path_params,
-            "body": body.decode() if body else None,
-            "stageVariables": {},
-            "isBase64Encoded": False,
-            "requestContext": {
-                "accountId": "123456789012",
-                "apiId": "sapimo-mock",
-                "domainName": "localhost",
-                "http": {
-                    "method": request.method,
-                    "path": f"/{path}",
-                    "protocol": "HTTP/1.1",
-                    "sourceIp": "127.0.0.1",
-                },
-                "requestId": "mock-request-id",
-                "stage": "prod",
-                "time": "01/Jan/2025:00:00:00 +0000",
-                "timeEpoch": 1704067200,
-            },
-        }
+        # 動的 requestContext 共通値
+        now = datetime.datetime.now(datetime.timezone.utc)
+        request_time = now.strftime("%d/%b/%Y:%H:%M:%S %z")
+        request_epoch = int(now.timestamp())
+        request_id = str(uuid.uuid4())
+        domain_name = request.url.netloc or "localhost"
+        source_ip = request.client.host if request.client else "127.0.0.1"
 
-        authorizer_context = self._build_authorizer_context(route_info, headers)
-        if authorizer_context:
-            event["requestContext"]["authorizer"] = authorizer_context
+        authorizer_context = await self._build_authorizer_context(
+            route_info, headers, request, path
+        )
+
+        event_type = route_info.get("event_type", "APIGW_V2")
+
+        if event_type == "APIGW":
+            event = self._build_v1_event(
+                request=request,
+                path=path,
+                route_info=route_info,
+                body_str=body_str,
+                headers=headers,
+                multi_value_headers=multi_value_headers,
+                query_params=query_params,
+                multi_value_query=multi_value_query,
+                path_params=path_params,
+                request_time=request_time,
+                request_epoch=request_epoch,
+                request_id=request_id,
+                domain_name=domain_name,
+                source_ip=source_ip,
+                authorizer_context=authorizer_context,
+            )
+        else:
+            event = self._build_v2_event(
+                request=request,
+                path=path,
+                route_info=route_info,
+                body_str=body_str,
+                headers=headers,
+                query_params=query_params,
+                path_params=path_params,
+                request_time=request_time,
+                request_epoch=request_epoch,
+                request_id=request_id,
+                domain_name=domain_name,
+                source_ip=source_ip,
+                authorizer_context=authorizer_context,
+            )
 
         return event
 
-    def _build_authorizer_context(
-        self, route_info: dict, headers: dict[str, str]
+    @staticmethod
+    def _build_v1_event(
+        *,
+        request,
+        path,
+        route_info,
+        body_str,
+        headers,
+        multi_value_headers,
+        query_params,
+        multi_value_query,
+        path_params,
+        request_time,
+        request_epoch,
+        request_id,
+        domain_name,
+        source_ip,
+        authorizer_context,
+    ) -> dict:
+        """API Gateway v1 (REST API) 形式の Lambda event を構築する。"""
+        template_path = route_info["path"]
+
+        request_context = {
+            "accountId": "123456789012",
+            "apiId": "sapimo-mock",
+            "domainName": domain_name,
+            "extendedRequestId": None,
+            "httpMethod": request.method,
+            "identity": {
+                "accountId": None,
+                "apiKey": None,
+                "caller": None,
+                "cognitoAuthenticationProvider": None,
+                "cognitoAuthenticationType": None,
+                "cognitoIdentityPoolId": None,
+                "sourceIp": source_ip,
+                "user": None,
+                "userAgent": headers.get("User-Agent", "Custom User Agent String"),
+                "userArn": None,
+            },
+            "path": template_path,
+            "protocol": "HTTP/1.1",
+            "requestId": request_id,
+            "requestTime": request_time,
+            "requestTimeEpoch": request_epoch,
+            "resourceId": "123456",
+            "resourcePath": template_path,
+            "stage": "Prod",
+        }
+
+        if authorizer_context:
+            request_context["authorizer"] = authorizer_context
+
+        return {
+            "version": "1.0",
+            "body": body_str,
+            "headers": headers,
+            "httpMethod": request.method,
+            "multiValueHeaders": multi_value_headers,
+            "multiValueQueryStringParameters": multi_value_query,
+            "path": f"/{path}",
+            "pathParameters": path_params,
+            "queryStringParameters": query_params,
+            "requestContext": request_context,
+            "resource": template_path,
+            "stageVariables": None,
+            "isBase64Encoded": False,
+        }
+
+    @staticmethod
+    def _build_v2_event(
+        *,
+        request,
+        path,
+        route_info,
+        body_str,
+        headers,
+        query_params,
+        path_params,
+        request_time,
+        request_epoch,
+        request_id,
+        domain_name,
+        source_ip,
+        authorizer_context,
+    ) -> dict:
+        """API Gateway v2 (HTTP API) 形式の Lambda event を構築する。"""
+        template_path = route_info["path"]
+        cookies = [f"{k}={v}" for k, v in request.cookies.items()]
+
+        request_context = {
+            "routeKey": f"{request.method} {template_path}",
+            "accountId": "123456789012",
+            "stage": "Prod",
+            "requestId": request_id,
+            "apiId": "sapimo-mock",
+            "domainName": domain_name,
+            "domainPrefix": "id",
+            "time": request_time,
+            "timeEpoch": request_epoch,
+            "http": {
+                "method": request.method,
+                "path": f"/{path}",
+                "protocol": "HTTP/1.1",
+                "sourceIp": source_ip,
+                "userAgent": headers.get("User-Agent", "Custom User Agent String"),
+            },
+        }
+
+        if authorizer_context:
+            request_context["authorizer"] = authorizer_context
+
+        event = {
+            "version": "2.0",
+            "routeKey": f"{request.method} {template_path}",
+            "rawPath": f"/{path}",
+            "rawQueryString": str(request.url.query),
+            "cookies": cookies,
+            "headers": headers,
+            "queryStringParameters": query_params,
+            "pathParameters": path_params,
+            "body": body_str,
+            "requestContext": request_context,
+            "stageVariables": {},
+            "isBase64Encoded": False,
+        }
+
+        return event
+
+    async def _build_authorizer_context(
+        self,
+        route_info: dict,
+        headers: dict[str, str],
+        request: Request | None = None,
+        path: str | None = None,
     ) -> dict | None:
         """
         認証検証は行わず、AuthTypeに応じてrequestContext.authorizerを構築する。
-        旧ローカル実行系（mock/executer）の振る舞いに合わせる。
+        CUSTOM_TOKEN / CUSTOM_REQUEST / CUSTOM の場合は Authorizer Lambda を実行し、
+        レスポンスの context を返す。
         """
         auth_type = str(route_info.get("auth_type", "NONE")).upper()
 
         if auth_type in {"JWT", "COGNITO_USER_POOLS"}:
-            authorization = headers.get("authorization") or headers.get("Authorization")
+            authorization = headers.get("Authorization")
             if not authorization:
                 return None
 
@@ -639,7 +839,238 @@ class LambdaGateway:
                 }
             }
 
+        if auth_type in {"CUSTOM_TOKEN", "CUSTOM", "CUSTOM_REQUEST"}:
+            authorizer_ref = route_info.get("authorizer")
+            if not authorizer_ref:
+                logger.warning(
+                    "No authorizer reference for auth_type=%s on path=%s",
+                    auth_type,
+                    route_info.get("path"),
+                )
+                return None
+
+            authorizer_config = self._resolve_authorizer_lambda(authorizer_ref)
+            if not authorizer_config:
+                logger.warning(
+                    "Authorizer Lambda not found for reference: %s", authorizer_ref
+                )
+                return None
+
+            if auth_type == "CUSTOM_TOKEN":
+                auth_event = self._build_token_authorizer_event(
+                    route_info, headers, request, path
+                )
+            else:
+                auth_event = self._build_request_authorizer_event(
+                    route_info, headers, request, path
+                )
+
+            if auth_event is None:
+                return None
+
+            result = await self._execute_authorizer_lambda(
+                authorizer_config, auth_event
+            )
+            if not result:
+                return None
+
+            # Check authorizer policy for Deny
+            policy = result.get("policyDocument", {})
+            for statement in policy.get("Statement", []):
+                if statement.get("Effect") == "Deny":
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Access denied by Lambda authorizer",
+                    )
+
+            return result.get("context", {})
+
         return None
+
+    def _resolve_authorizer_lambda(self, authorizer_ref: str) -> dict | None:
+        """Authorizer Lambda の参照を解決して設定を返す。"""
+        if not authorizer_ref or not self.authorizer_lambdas:
+            return None
+        # Direct key match
+        if authorizer_ref in self.authorizer_lambdas:
+            return self.authorizer_lambdas[authorizer_ref]
+        # ARN match: arn:aws:lambda:...:function:Name
+        if ":function:" in authorizer_ref:
+            func_name = authorizer_ref.rsplit(":", 1)[-1]
+            if func_name in self.authorizer_lambdas:
+                return self.authorizer_lambdas[func_name]
+        # Substring match as fallback
+        for name, config in self.authorizer_lambdas.items():
+            if name in authorizer_ref:
+                return config
+        return None
+
+    def _build_token_authorizer_event(
+        self,
+        route_info: dict,
+        headers: dict,
+        request: Request | None,
+        path: str | None,
+    ) -> dict | None:
+        """TOKEN Authorizer 用のイベントを構築する。"""
+        auth_source = route_info.get("auth_source")
+        if isinstance(auth_source, dict):
+            header_name = auth_source.get("Header", "Authorization")
+        elif isinstance(auth_source, str):
+            header_name = auth_source
+        else:
+            header_name = "Authorization"
+        header_name = "-".join(w.capitalize() for w in header_name.split("-"))
+
+        token = headers.get(header_name)
+        if not token:
+            logger.warning(
+                "Token not found in header '%s' for TOKEN authorizer", header_name
+            )
+            return None
+
+        method_arn = self._build_method_arn(route_info, request, path)
+        return {
+            "type": "TOKEN",
+            "authorizationToken": token,
+            "methodArn": method_arn,
+        }
+
+    def _build_request_authorizer_event(
+        self,
+        route_info: dict,
+        headers: dict,
+        request: Request | None,
+        path: str | None,
+    ) -> dict:
+        """REQUEST Authorizer 用のイベントを構築する。"""
+        method_arn = self._build_method_arn(route_info, request, path)
+        query_params = dict(request.query_params) if request else {}
+        path_params = (
+            self._extract_path_params(route_info["path"], f"/{path}") if path else {}
+        )
+        return {
+            "type": "REQUEST",
+            "methodArn": method_arn,
+            "headers": headers,
+            "queryStringParameters": query_params,
+            "pathParameters": path_params,
+            "requestContext": {
+                "accountId": "123456789012",
+                "apiId": "sapimo-mock",
+                "httpMethod": request.method if request else "GET",
+                "resourcePath": route_info.get("path", ""),
+                "stage": "Prod",
+            },
+        }
+
+    @staticmethod
+    def _build_method_arn(
+        route_info: dict, request: Request | None, path: str | None
+    ) -> str:
+        """API Gateway メソッド ARN を構築する。"""
+        method = request.method if request else "GET"
+        resource = path or route_info.get("path", "")
+        return f"arn:aws:execute-api:us-east-1:123456789012:sapimo/Prod/{method}/{resource}"
+
+    async def _execute_authorizer_lambda(
+        self, authorizer_config: dict, event: dict
+    ) -> dict | None:
+        """Authorizer Lambda を実行してレスポンスを返す。"""
+        if self.single_container_mode:
+            if not self.local_lambda_runner:
+                logger.error(
+                    "Local lambda runner not initialized for authorizer execution"
+                )
+                return None
+            try:
+                return await self.local_lambda_runner.execute(authorizer_config, event)
+            except Exception:
+                logger.exception("Authorizer Lambda execution failed")
+                return None
+        else:
+            logger.warning(
+                "Custom Lambda Authorizer is not supported in multi-container mode"
+            )
+            return None
+
+    async def _process_s3_triggers(self):
+        """Lambda 実行後の S3 変更を検知し、トリガー Lambda をチェーン実行する。"""
+        if not self.mock_manager or not self.triggered_lambdas:
+            return
+
+        max_iterations = 10
+        for _ in range(max_iterations):
+            changes = self.mock_manager.get_change("s3")
+            updated = changes.get("updated", {})
+            deleted = changes.get("deleted", {})
+            if not updated and not deleted:
+                break
+
+            for bucket, keys in updated.items():
+                triggered_config = self._find_triggered_lambda(bucket)
+                if not triggered_config:
+                    logger.info(
+                        "S3 changes in bucket '%s' but no trigger configured", bucket
+                    )
+                    continue
+                event = self._build_s3_event(bucket, keys, "ObjectCreated:Put")
+                await self._execute_triggered_lambda(triggered_config, event)
+
+            for bucket, keys in deleted.items():
+                triggered_config = self._find_triggered_lambda(bucket)
+                if not triggered_config:
+                    continue
+                event = self._build_s3_event(bucket, keys, "ObjectRemoved:Delete")
+                await self._execute_triggered_lambda(triggered_config, event)
+
+            self.mock_manager.sync()
+        else:
+            logger.warning(
+                "S3 trigger chain exceeded maximum iterations (%d)", max_iterations
+            )
+
+    def _find_triggered_lambda(self, bucket_name: str) -> dict | None:
+        """バケット名からトリガー Lambda 設定を解決する。"""
+        if bucket_name in self.triggered_lambdas:
+            return self.triggered_lambdas[bucket_name]
+        for key, config in self.triggered_lambdas.items():
+            if (
+                key.endswith(f":::{bucket_name}")
+                or bucket_name in key
+                or key in bucket_name
+            ):
+                return config
+        return None
+
+    @staticmethod
+    def _build_s3_event(bucket: str, keys: list[str], event_name: str) -> dict:
+        """S3 イベントオブジェクトを構築する。"""
+        records = []
+        for key in keys:
+            records.append(
+                {
+                    "eventSource": "aws:s3",
+                    "eventName": event_name,
+                    "s3": {
+                        "bucket": {"name": bucket},
+                        "object": {"key": key, "size": 0},
+                    },
+                }
+            )
+        return {"Records": records}
+
+    async def _execute_triggered_lambda(self, trigger_config: dict, event: dict):
+        """トリガー Lambda を実行する。"""
+        if not self.single_container_mode or not self.local_lambda_runner:
+            logger.warning("S3 trigger Lambda execution requires single-container mode")
+            return
+        try:
+            func_name = trigger_config.get("function_name", "unknown")
+            logger.info("Executing S3 triggered Lambda: %s", func_name)
+            await self.local_lambda_runner.execute(trigger_config, event)
+        except Exception:
+            logger.exception("S3 triggered Lambda execution failed")
 
     def _extract_path_params(self, pattern: str, actual_path: str) -> dict[str, str]:
         """パスパラメータを抽出"""
