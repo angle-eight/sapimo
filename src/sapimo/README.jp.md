@@ -154,6 +154,56 @@ options.set("mock", status=400)
 
 ---
 
+# Lambda内の関数を差し替える（monkeypatch）
+
+`monkeypatch.setattr` を使うと、Lambda実行時に特定の関数を差し替えることができます。
+motoでサポートされていないAWSサービス（Bedrock等）の呼び出しを差し替える場合に便利です。
+
+パッチはLambda実行中のみ有効で、実行後は自動的に元に戻ります。
+
+```python
+from sapimo.mock import api, monkeypatch
+import io
+
+# デコレータ形式: Bedrock の invoke_model を差し替え
+@monkeypatch.setattr("app.bedrock_client.invoke_model")
+def mock_invoke_model(**kwargs):
+    import json
+    return {
+        "body": io.BytesIO(json.dumps({
+            "content": [{"text": "これはモックレスポンスです"}]
+        }).encode()),
+        "contentType": "application/json",
+    }
+
+# Lambda は通常通り実行。invoke_model の呼び出しだけが差し替わる
+@api.post("/chat")
+async def chat():
+    pass
+```
+
+命令形式（pytest風）も使えます:
+```python
+monkeypatch.setattr("app.bedrock_client.invoke_model",
+    lambda **kwargs: {"body": io.BytesIO(b'{"content": [{"text": "mock"}]}'), "contentType": "application/json"})
+```
+
+**注意**: target はモジュール内で名前が**使われている場所**を指定します（`unittest.mock.patch` と同じルール）。
+
+例えば Lambda コードが以下の場合:
+```python
+# lambda/chat/app.py
+import boto3
+bedrock_client = boto3.client("bedrock-runtime")
+
+def lambda_handler(event, context):
+    response = bedrock_client.invoke_model(modelId="anthropic.claude-v2", body=...)
+```
+
+target は `app.bedrock_client.invoke_model` になります。
+
+---
+
 # データの扱い
 
 - S3/DynamoDB 等のモックデータは `data/` 配下に保持されます。

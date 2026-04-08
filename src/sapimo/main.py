@@ -228,26 +228,16 @@ def generate_mock_api(filepath: Path):
     is_flag=True,
     help="Force rebuild the container image",
 )
-@click.option(
-    "--detach",
-    "-d",
-    is_flag=True,
-    help="Run in detached mode (background)",
-)
-def start(host: str, port: int, build: bool, detach: bool):
-    """Start Sapimo API mock server"""
+def start(host: str, port: int, build: bool):
+    """Start Sapimo API mock server (runs in background)"""
 
-    # Docker Composeファイルの存在確認（api_mockディレクトリ内）
     compose_file = WORKING_DIR / "docker-compose.yml"
     if not compose_file.exists():
         click.echo("❌ docker-compose.yml not found. Run 'sapimo init' first.")
         return
 
-    # api_mockディレクトリで実行
     original_cwd = os.getcwd()
     os.chdir(WORKING_DIR)
-
-    # コンテナ起動
     try:
         cmd = [
             "docker",
@@ -256,15 +246,12 @@ def start(host: str, port: int, build: bool, detach: bool):
             _compose_project_name(),
             "up",
             "--remove-orphans",
+            "-d",
         ]
 
         if build:
             cmd.append("--build")
 
-        if detach:
-            cmd.append("-d")
-
-        # 環境変数設定
         env = os.environ.copy()
         env.update(
             {
@@ -274,64 +261,155 @@ def start(host: str, port: int, build: bool, detach: bool):
         )
 
         subprocess.run(cmd, env=env, check=True)
+        click.echo(f"✅ Sapimo started at http://localhost:{port}")
+        click.echo("   Run 'sapimo log' to see logs.")
     except subprocess.CalledProcessError:
         click.echo("❌ Failed to start container")
     finally:
-        # 元のディレクトリに戻る
         os.chdir(original_cwd)
 
 
 @main.command()
-def status():
-    """Check mock data status"""
+@click.option(
+    "--tail",
+    default=100,
+    show_default=True,
+    help="Number of lines to show from the end of logs",
+)
+@click.option(
+    "--no-follow",
+    is_flag=True,
+    default=False,
+    help="Print logs without following",
+)
+def log(tail: int, no_follow: bool):
+    """Show Sapimo container logs"""
 
+    compose_file = WORKING_DIR / "docker-compose.yml"
+    if not compose_file.exists():
+        click.echo("❌ docker-compose.yml not found. Run 'sapimo init' first.")
+        return
+
+    original_cwd = os.getcwd()
+    os.chdir(WORKING_DIR)
     try:
         cmd = [
             "docker",
             "compose",
             "-p",
             _compose_project_name(),
-            "exec",
-            "sapimo",
-            "python",
-            "-c",
-            """
-import sys
-import json
-from pathlib import Path
-runtime_root = Path('/workspace/api_mock/docker')
-if not runtime_root.exists():
-    raise RuntimeError(
-        "Missing runtime assets: /workspace/api_mock/docker. "
-        "Run 'sapimo init' to regenerate docker assets."
-    )
-sys.path.insert(0, str(runtime_root))
-
-try:
-    from sapimo.docker.mock_manager import DockerMockManager
-    from sapimo.constants import CONFIG_FILE
-
-    if CONFIG_FILE.exists():
-        mock_manager = DockerMockManager(CONFIG_FILE)
-        status = mock_manager.get_persistent_data_status()
-
-        if status:
-            print("📊 Mock Data Status:")
-            for service, data in status.items():
-                print(f"  {service}: {data}")
-        else:
-            print("📊 No persistent data found")
-    else:
-        print("❌ Config file not found")
-
-except Exception as e:
-    print(f"❌ Error: {e}")
-""",
+            "logs",
+            "--tail",
+            str(tail),
         ]
+        if not no_follow:
+            cmd.append("-f")
 
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError:
-        click.echo("❌ Failed to get status. Make sure the server is running.")
+        click.echo("❌ Failed to get logs. Make sure the server is running.")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        os.chdir(original_cwd)
+
+
+@main.command()
+def stop():
+    """Stop Sapimo API mock server"""
+
+    compose_file = WORKING_DIR / "docker-compose.yml"
+    if not compose_file.exists():
+        click.echo("❌ docker-compose.yml not found. Run 'sapimo init' first.")
+        return
+
+    original_cwd = os.getcwd()
+    os.chdir(WORKING_DIR)
+    try:
+        cmd = [
+            "docker",
+            "compose",
+            "-p",
+            _compose_project_name(),
+            "down",
+        ]
+        subprocess.run(cmd, check=True)
+        click.echo("✅ Sapimo stopped")
+    except subprocess.CalledProcessError:
+        click.echo("❌ Failed to stop container")
+    finally:
+        os.chdir(original_cwd)
+
+
+@main.command()
+def status():
+    """Show Sapimo running status"""
+
+    compose_file = WORKING_DIR / "docker-compose.yml"
+    if not compose_file.exists():
+        click.echo("⏹  Not initialized. Run 'sapimo init' first.")
+        return
+
+    original_cwd = os.getcwd()
+    os.chdir(WORKING_DIR)
+    try:
+        import json as _json
+
+        result = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-p",
+                _compose_project_name(),
+                "ps",
+                "--format",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            click.echo("❌ Failed to get status (is Docker running?)")
+            return
+
+        containers = _parse_compose_ps_json(result.stdout.strip())
+
+        if not containers:
+            click.echo("⏹  Stopped")
+            return
+
+        for container in containers:
+            state = container.get("State", "").lower()
+            status_text = container.get("Status", "")
+            health = container.get("Health", "").lower()
+
+            if state == "running":
+                publishers = container.get("Publishers") or []
+                port_info = ""
+                for pub in publishers:
+                    published = pub.get("PublishedPort", 0)
+                    if published:
+                        port_info = f"  →  http://localhost:{published}"
+                        break
+
+                if health == "unhealthy":
+                    click.echo(f"⚠️  Unhealthy{port_info}")
+                    click.echo("   Run 'sapimo log' to check for errors.")
+                elif health == "starting":
+                    click.echo(f"⏳ Starting...{port_info}")
+                else:
+                    click.echo(f"✅ Running{port_info}")
+            elif state == "exited":
+                click.echo(f"❌ Error (exited) - {status_text}")
+                click.echo("   Run 'sapimo log' to check for errors.")
+            elif state == "restarting":
+                click.echo(f"🔄 Restarting - {status_text}")
+                click.echo("   Run 'sapimo log' to check for errors.")
+            else:
+                click.echo(f"⏹  Stopped")
+    finally:
+        os.chdir(original_cwd)
 
 
 @main.command()
@@ -399,6 +477,27 @@ except Exception as e:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError:
         click.echo("❌ Failed to clean data. Make sure the server is running.")
+
+
+def _parse_compose_ps_json(output: str) -> list[dict]:
+    """docker compose ps --format json の出力をパースする（JSON配列・NDJSON両対応）"""
+    import json as _json
+
+    if not output:
+        return []
+    try:
+        data = _json.loads(output)
+        return data if isinstance(data, list) else [data]
+    except _json.JSONDecodeError:
+        containers = []
+        for line in output.splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    containers.append(_json.loads(line))
+                except _json.JSONDecodeError:
+                    pass
+        return containers
 
 
 def _warn_old_config_format(config_path):

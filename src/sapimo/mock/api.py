@@ -4,9 +4,11 @@ FastAPI APIRouter のサブクラスで Mock 定義を可能にする
 """
 
 from typing import Dict, Callable, Any
+from contextlib import contextmanager
 import inspect
 import asyncio
 from functools import wraps
+from unittest.mock import patch as _mock_patch
 
 from fastapi import APIRouter
 
@@ -128,3 +130,73 @@ class MockOptions:
 
 # グローバルオプション
 options = MockOptions()
+
+
+class Monkeypatch:
+    """pytest-like monkeypatch for Lambda execution.
+
+    Lambda 実行時に指定したモジュール属性を差し替える。
+    unittest.mock.patch を内部で使用し、実行後に自動復元する。
+
+    Usage in app.py::
+
+        from sapimo.mock import monkeypatch
+
+        # デコレータ形式
+        @monkeypatch.setattr("my_module.call_bedrock")
+        def mock_call_bedrock(prompt, model_id):
+            return {"content": [{"text": "Mock AI response"}]}
+
+        # 命令形式 (pytest 風)
+        monkeypatch.setattr("my_module.get_timestamp", lambda: "2024-01-01")
+    """
+
+    def __init__(self):
+        self._patches: list[tuple[str, Any]] = []
+
+    def setattr(self, target: str, replacement: Any = None):
+        """Register a monkeypatch.
+
+        Args:
+            target: Dotted path to the attribute (e.g. ``"my_module.func"``).
+            replacement: Replacement value/function.
+                If omitted, returns a decorator.
+
+        Returns:
+            When used as decorator (replacement is None), returns a decorator.
+            Otherwise returns replacement as-is.
+        """
+        if replacement is not None:
+            self._patches.append((target, replacement))
+            return replacement
+
+        def decorator(func):
+            self._patches.append((target, func))
+            return func
+
+        return decorator
+
+    def clear(self):
+        """Clear all registered patches (called on app.py reload)."""
+        self._patches.clear()
+
+    @contextmanager
+    def apply(self):
+        """Context manager that activates all registered patches.
+
+        Patches are applied in registration order and reverted on exit.
+        """
+        active = []
+        try:
+            for target, replacement in self._patches:
+                p = _mock_patch(target, replacement)
+                p.start()
+                active.append(p)
+            yield
+        finally:
+            for p in reversed(active):
+                p.stop()
+
+
+# グローバルインスタンス
+monkeypatch = Monkeypatch()

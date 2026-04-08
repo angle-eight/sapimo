@@ -107,6 +107,33 @@ Mock 関数がステータスコード（int）を返した場合、`openapi_exa
 3. 見つからない場合は 2xx / default にフォールバック
 4. `content.application/json.example` → `content.application/json.examples.*.value` の順で値を取得
 
+### Monkeypatch（Lambda 内関数の差し替え）
+
+pytest の `monkeypatch.setattr` に倣い、Lambda 実行時に特定の関数やオブジェクトを差し替える機能。
+Bedrock のように moto でサポートされていない AWS サービスの呼び出しなど、Lambda の一部だけを差し替えたい場合に使用する。
+
+パッチは Lambda ハンドラの実行中のみ有効で、実行後に自動復元される（`unittest.mock.patch` ベース）。
+
+```python
+from sapimo.mock import api, monkeypatch
+
+# デコレータ形式: Lambda 内の関数を差し替え
+@monkeypatch.setattr("my_module.bedrock_helper.call_bedrock")
+def mock_call_bedrock(prompt, model_id):
+    return {"content": [{"text": "Mock AI response"}]}
+
+# 命令形式 (pytest 風)
+monkeypatch.setattr("my_module.utils.get_timestamp", lambda: "2024-01-01")
+
+# Lambda は通常通り実行（pass = None を返す）
+@api.post("/chat")
+async def chat():
+    pass  # Lambda を実行。call_bedrock は mock_call_bedrock に差し替え済み
+```
+
+**注意**: `target` は "モジュールパス.属性名" の形式で、`unittest.mock.patch` と同じルールに従う。
+差し替え対象はそのモジュール内で名前が**使われている場所**を指定する（定義場所ではない）。
+
 ---
 
 ## 2. AWS Mock（moto ベース）

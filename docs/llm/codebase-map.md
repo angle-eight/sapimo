@@ -26,8 +26,8 @@ src/sapimo/
 │   └── image_info.py    # Dockerfile 解析（Image PackageType の Lambda 用）
 │
 ├── mock/                # Mock 定義とAWSサービスモック
-│   ├── __init__.py      # api, change_input, options を export
-│   ├── api.py           # MockRouter デコレータ（@api.get 等）
+│   ├── __init__.py      # api, change_input, options, monkeypatch を export
+│   ├── api.py           # MockRouter デコレータ（@api.get 等）、Monkeypatch
 │   ├── mock_manager.py  # AWS モック管理（S3Mock, DynamoMock, SqsMock 等）
 │   ├── mediator_route.py # FastAPI カスタム APIRoute（旧アーキテクチャ。現在は Gateway 側で処理）
 │   └── executer/        # Lambda 実行関連（旧アーキテクチャ部分を含む）
@@ -160,6 +160,7 @@ async def modified():
 | `MockRouter` (グローバル `api`) | FastAPI `APIRouter` サブクラス。デコレータでルート定義を収集。パラメータ解決は FastAPI に完全委譲（Pydantic バリデーション対応）。戻り値をキャプチャして Gateway が解釈 |
 | `InputOverride` | `change_input()` の戻り値。Lambda 呼び出し時に event を部分上書き |
 | `MockOptions` (グローバル `options`) | `mode` (`"api"` / `"mock"`) の切り替え |
+| `Monkeypatch` (グローバル `monkeypatch`) | pytest 風の関数差し替え。`setattr(target, replacement)` で登録、Lambda 実行時に `unittest.mock.patch` で自動適用・復元 |
 
 #### `mock/mock_manager.py` — AWS モック
 

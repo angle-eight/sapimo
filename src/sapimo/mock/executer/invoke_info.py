@@ -1,3 +1,6 @@
+# NOTE: このファイルは旧アーキテクチャのレガシーコードです。現在はどこからも使用されていません。
+# lambda_invoker.py (LambdaInvoker) からのみ参照されていましたが、そちらも未使用です。
+
 import datetime
 import uuid
 import json

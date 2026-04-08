@@ -5,6 +5,7 @@ from typing import Any
 import shutil
 import yaml
 
+from sapimo.constants import SUPPORTED_PYTHON_VERSIONS, DEFAULT_PYTHON_VERSION
 from sapimo.utils import LogManager, force_rmtree
 
 logger = LogManager.setup_logger(__file__)
@@ -42,7 +43,58 @@ class SingleContainerComposeGenerator:
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
         )
 
+    def _resolve_python_version(self) -> str:
+        """config.yaml 内の全 Lambda Runtime から最新の対応 Python バージョンを決定する。"""
+        if not self.config_path.exists():
+            return DEFAULT_PYTHON_VERSION
+
+        with open(self.config_path) as f:
+            config = yaml.safe_load(f) or {}
+
+        versions: list[tuple[int, int]] = []
+        for path_methods in config.get("paths", {}).values():
+            for method_config in path_methods.values():
+                runtime = method_config.get("Properties", {}).get("Runtime", "") or ""
+                ver = self._parse_python_runtime(runtime)
+                if ver:
+                    versions.append(ver)
+
+        for trigger_config in config.get("triggered", {}).values():
+            runtime = trigger_config.get("Properties", {}).get("Runtime", "") or ""
+            ver = self._parse_python_runtime(runtime)
+            if ver:
+                versions.append(ver)
+
+        if not versions:
+            return DEFAULT_PYTHON_VERSION
+
+        supported = {
+            tuple(int(x) for x in v.split(".")): v for v in SUPPORTED_PYTHON_VERSIONS
+        }
+        # Lambda Runtime のうちサポート対象のバージョンだけを抽出
+        compatible = [v for v in versions if v in supported]
+        if compatible:
+            best = max(compatible)
+            return supported[best]
+
+        # サポート対象のバージョンがない場合はデフォルトを使用
+        return DEFAULT_PYTHON_VERSION
+
+    @staticmethod
+    def _parse_python_runtime(runtime: str) -> tuple[int, int] | None:
+        """'python3.12' のような文字列を (3, 12) に変換する。非Python Runtimeは None。"""
+        normalized = runtime.strip().lower()
+        if not normalized.startswith("python"):
+            return None
+        version_str = normalized[len("python") :]
+        parts = version_str.split(".")
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            return (int(parts[0]), int(parts[1]))
+        return None
+
     def generate_compose_config(self) -> dict[str, Any]:
+        python_version = self._resolve_python_version()
+        logger.info("Using Python %s for single-container runtime", python_version)
         return {
             "services": {
                 "sapimo": {
@@ -50,6 +102,9 @@ class SingleContainerComposeGenerator:
                     "build": {
                         "context": "..",
                         "dockerfile": "api_mock/docker/single/Dockerfile",
+                        "args": {
+                            "PYTHON_VERSION": python_version,
+                        },
                     },
                     "command": ["python", "/workspace/api_mock/docker/gateway/main.py"],
                     "ports": ["${SAPIMO_PORT:-8000}:3000"],

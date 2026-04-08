@@ -66,7 +66,7 @@ def test_start_uses_single_service_compose_command(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cli_main.subprocess, "run", fake_run)
 
     before_cwd = Path.cwd()
-    cli_main.start.callback(host="127.0.0.1", port=9010, build=False, detach=True)
+    cli_main.start.callback(host="127.0.0.1", port=9010, build=False)
     after_cwd = Path.cwd()
 
     assert calls["cmd"] == [

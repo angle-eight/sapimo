@@ -5,6 +5,11 @@ WORKING_DIR = Path.cwd() / "api_mock"
 API_FILE = WORKING_DIR / "app.py"
 CONFIG_FILE = WORKING_DIR / "config.yaml"
 
+# sapimo がサポートする Python バージョン (Docker ランタイム用)
+# pyproject.toml の requires-python (>=3.12) と整合させる
+SUPPORTED_PYTHON_VERSIONS: list[str] = ["3.12", "3.13"]
+DEFAULT_PYTHON_VERSION: str = "3.12"
+
 
 class EventType(Enum):
     APIGW = 1
