@@ -1,3 +1,6 @@
+# NOTE: このファイルは旧アーキテクチャのレガシーコードです。現在はどこからも使用されていません。
+# 新アーキテクチャでは src/sapimo/docker/templates/gateway/main.py (LambdaGateway) が同等の役割を担っています。
+
 from typing import Callable
 from logging import DEBUG
 from enum import Enum

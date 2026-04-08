@@ -63,8 +63,10 @@ class MockHandler:
                 sys.modules["app_mock"] = self._mock_module
 
                 from sapimo.mock.api import api as mock_router
+                from sapimo.mock.api import monkeypatch
 
                 mock_router.clear_routes()
+                monkeypatch.clear()
 
                 spec.loader.exec_module(self._mock_module)
 

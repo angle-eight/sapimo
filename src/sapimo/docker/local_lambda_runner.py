@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from sapimo.docker.lambda_execution_logger import LambdaExecutionLogger
+from sapimo.mock.api import monkeypatch
 
 
 class LocalLambdaRunner:
@@ -24,9 +25,7 @@ class LocalLambdaRunner:
         # In-process execution mutates os.environ and sys.path temporarily.
         # Serialize executions to avoid cross-request contamination.
         self._execution_lock = asyncio.Lock()
-        self._logger = LambdaExecutionLogger(
-            project_root / "api_mock" / "log"
-        )
+        self._logger = LambdaExecutionLogger(project_root / "api_mock" / "log")
 
     async def execute(
         self, route_info: dict[str, Any], event: dict[str, Any]
@@ -66,9 +65,10 @@ class LocalLambdaRunner:
                 result = None
                 with self._logger.capture_stdout() as captured:
                     try:
-                        result = handler_func(event, None)
-                        if inspect.isawaitable(result):
-                            result = await result
+                        with monkeypatch.apply():
+                            result = handler_func(event, None)
+                            if inspect.isawaitable(result):
+                                result = await result
                     except Exception:
                         error_text = traceback.format_exc()
                         raise
@@ -79,8 +79,12 @@ class LocalLambdaRunner:
                             function_name=function_name,
                             handler=handler,
                             event=event,
-                            result=result if isinstance(result, dict) else (
-                                {"statusCode": 200, "body": result} if result is not None else None
+                            result=result
+                            if isinstance(result, dict)
+                            else (
+                                {"statusCode": 200, "body": result}
+                                if result is not None
+                                else None
                             ),
                             captured_output=captured.getvalue(),
                             duration_ms=duration_ms,

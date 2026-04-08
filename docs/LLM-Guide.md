@@ -82,6 +82,7 @@ Sapimo は、AWS バックエンドのローカル開発環境を手軽に再現
 │    └─ LocalLambdaRunner: Lambda をインプロセス実行          │
 │        ├─ CodeUri + Layers → 一時的に sys.path に追加     │
 │        ├─ 環境変数を呼び出し単位で保存→適用→復元            │
+│        ├─ Monkeypatch: app.py の定義で関数差し替え         │
 │        └─ handler(event, context) を実行                  │
 │                                                         │
 │  AWS Mock (moto + mock_aws)                             │

@@ -1,3 +1,6 @@
+# NOTE: このファイルは旧アーキテクチャのレガシーコードです。現在はどこからも使用されていません。
+# 新アーキテクチャでは src/sapimo/docker/local_lambda_runner.py (LocalLambdaRunner) が同等の役割を担っています。
+
 import os
 import importlib
 import sys
@@ -10,10 +13,16 @@ from fastapi.responses import JSONResponse, Response
 
 from sapimo.parser.config_parser import ConfigParser
 from sapimo.utils import LogManager
-from sapimo.mock.executer.invoke_info import \
-    ApiInfo, ApiV2Info, InvokeInfo, TokenAuthorizerInfo, RequestAuthorizerInfo
+from sapimo.mock.executer.invoke_info import (
+    ApiInfo,
+    ApiV2Info,
+    InvokeInfo,
+    TokenAuthorizerInfo,
+    RequestAuthorizerInfo,
+)
 from sapimo.constants import EventType, AuthType
 from sapimo.exceptions import LambdaInvokeError, EventConvertError
+from sapimo.mock.api import monkeypatch
 from logging import DEBUG
 
 logger = LogManager.setup_logger(__file__, level=DEBUG)
@@ -21,15 +30,15 @@ logger = LogManager.setup_logger(__file__, level=DEBUG)
 
 class LambdaInvoker:
     """
-        - retain path config
-        - setup s3 and dynamodb in local dir (if required)
-        - setup and execute lambda python code
+    - retain path config
+    - setup s3 and dynamodb in local dir (if required)
+    - setup and execute lambda python code
     """
 
     def __init__(self, path: Path):
         """
-            - set config
-            - setup s3 and dynamodb
+        - set config
+        - setup s3 and dynamodb
         """
         self._config = ConfigParser(path)
 
@@ -51,8 +60,8 @@ class LambdaInvoker:
 
     async def run_by_trigger(self, updated: dict, deleted: dict):
         """
-            lambda execution when s3 file is updated
-            - interpret trigger rules
+        lambda execution when s3 file is updated
+        - interpret trigger rules
         """
         if not self._config.triggered:
             return
@@ -79,16 +88,16 @@ class LambdaInvoker:
 
     async def run_by_api(self, req: Request):
         """
-            api call
-            Return:
-                API response
+        api call
+        Return:
+            API response
         """
         props: ApiInfo = self._get_api_info(req)
         await self.auth_api(props, req)
 
         try:
             lambda_res = await self._lambda_exec(props, req)
-            if(lambda_res is not None):
+            if lambda_res is not None:
                 status = lambda_res.get("statusCode", 500)
                 body = lambda_res.get("body")
             else:
@@ -101,12 +110,14 @@ class LambdaInvoker:
             except:
                 return Response(status_code=status, content=body)
         except ModuleNotFoundError as e:
-            err_msg = "lambda code import error: " + str(e) + "\n"\
-                "- check 'CodeUri' or 'Layers'"\
-                f" of {props.path}.{props.method} "\
-                " in api_mock/config.yaml\n"\
-                "- check if the required modules are installed\n"\
+            err_msg = (
+                "lambda code import error: " + str(e) + "\n"
+                "- check 'CodeUri' or 'Layers'"
+                f" of {props.path}.{props.method} "
+                " in api_mock/config.yaml\n"
+                "- check if the required modules are installed\n"
                 "- check import section in your code\n"
+            )
             logger.error(err_msg)
             return Response(status_code=500, content=err_msg)
         except EventConvertError as e:
@@ -121,16 +132,15 @@ class LambdaInvoker:
             logger.exception("lambda error")  # FIXME
             return Response(status_code=500, content=str(e))
 
-    async def _lambda_exec(self, props: InvokeInfo,
-                           event_src: Union[Request, str]):
+    async def _lambda_exec(self, props: InvokeInfo, event_src: Union[Request, str]):
         """
-            common process of lambda execution
-            - set(change) env
-            - import required layer
-            - execute lambda code
+        common process of lambda execution
+        - set(change) env
+        - import required layer
+        - execute lambda code
 
-            Return:
-                result of lambda handler
+        Return:
+            result of lambda handler
         """
         if not props:
             raise LambdaInvokeError("lambda info is not exist")
@@ -147,7 +157,6 @@ class LambdaInvoker:
                 logger.exception("lambda event convert error")
                 raise EventConvertError()
 
-
             # import lambda code
             app = importlib.import_module(props.import_path)
 
@@ -160,7 +169,7 @@ class LambdaInvoker:
             # lambda execution
             try:
                 logger.info("--------- PARAMS --------")
-                qs =event.get("queryStringParameters", "")
+                qs = event.get("queryStringParameters", "")
                 bd = event.get("body", "")
                 logger.info(f"QueryStrings: {qs}")
                 logger.info(f"Body: {bd}")
@@ -170,7 +179,8 @@ class LambdaInvoker:
                     lam_logger = app.logger
                     log_changer = LogManager(lam_logger)
                     logger.info("--------- LAMBDA LOG --------")
-                lambda_res = eval("app."+props.func)(event, None)
+                with monkeypatch.apply():
+                    lambda_res = eval("app." + props.func)(event, None)
                 logger.info("---------- RESPONSE ---------")
                 logger.info(lambda_res)
                 if hasattr(app, "logger"):
@@ -199,6 +209,7 @@ class LambdaInvoker:
                         return res
             else:
                 return None
+
         return search_example(example)
 
     def _change_env(self, env: dict):
@@ -235,17 +246,14 @@ class LambdaInvoker:
         }
         def_env.update(env)
 
-        # delete one by one for avoid memory leak
-        for k in os.environ.keys():
-            del os.environ[k]
-        for k, v in def_env.items():
-            os.environ[k] = v
+        os.environ.clear()
+        os.environ.update(def_env)
 
         # TODO:restore env: unnecessary?
 
 
 class LayerImporter:
-    """ append lambda layer's code uri to sys.path """
+    """append lambda layer's code uri to sys.path"""
 
     def __init__(self, layers: list[str]):
         self._layers = layers
@@ -262,10 +270,12 @@ class LayerImporter:
     def __exit__(self, exc_type, exc_value, traceback):
         if self._count == 0:
             return
-        remove_targets = set(sys.path[-self._count:])
+        remove_targets = set(sys.path[-self._count :])
         if remove_targets != set(self._layers):
-            logger.warning("sys.path is changed by lambda function. \
-                            layers path can't be removed")
+            logger.warning(
+                "sys.path is changed by lambda function. \
+                            layers path can't be removed"
+            )
             return
         else:
             for _ in range(self._count):
