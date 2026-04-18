@@ -4,8 +4,8 @@ from pathlib import Path
 from sapimo.utils import LogManager, add_element
 from sapimo.parser.cf_resource_parser import CfResourceParser
 from sapimo.constants import EventType, AuthType
-from sapimo.exceptions import SamTemplateParseError, DockerFileParseError
-from sapimo.parser.image_info import ImageInfo
+from sapimo.exceptions import SamTemplateParseError
+from sapimo.parser.container_lambda_parser import ContainerLambdaDockerfileParser
 
 logger = LogManager.setup_logger(__file__)
 
@@ -39,25 +39,41 @@ class SamParser(CfResourceParser):
         if val["Type"] == "AWS::Serverless::Function":
             add_element(props, self._function_globals)
             if props["PackageType"] == "Image":
-                try:
-                    image_info = ImageInfo(val["Metadata"], self._root)
-                    props["CodeUri"] = image_info.code_uri
-                    props["Handler"] = image_info.handler
-                    if image_info.layers:
-                        props["Layers"] = image_info.layers
-                    props["Environment"] = {}
-                    props["Environment"]["Variables"] = image_info.envs
-                except DockerFileParseError as e:
-                    logger.warning(e.message)
-                    msg += (
-                        "sapimo: sapimo can't interpret your Dockerfile.\n"
-                        "you must edit api_mock/config.yaml"
+                metadata = val.get("Metadata", {})
+                docker_context_str = metadata.get("DockerContext", "")
+                dockerfile_name = metadata.get("Dockerfile", "Dockerfile")
+                if not docker_context_str:
+                    logger.warning(
+                        "Function '%s' has PackageType=Image but no Metadata.DockerContext. "
+                        "CodeUri will be empty. Edit api_mock/config.yaml manually.",
+                        name,
                     )
-                    props["CodeUri"] = "edit here! (e.g. app/)"
-                    props["Handler"] = "edit here! (e.g. app.lambda_handler)"
-                    props["Environment"]["Variables"] = {"SAMPLE_ENV": "VAL"}
-                    props["Layers"] = ["if use outer dir, add here (e.g. /libs)"]
-                    logger.warning(msg)
+                    props["CodeUri"] = ""
+                    props["Handler"] = "app.lambda_handler"
+                else:
+                    docker_context = (self._root / docker_context_str).resolve()
+                    try:
+                        info = ContainerLambdaDockerfileParser(
+                            docker_context, dockerfile_name
+                        ).parse()
+                        props["CodeUri"] = (
+                            str(docker_context.relative_to(self._root)) + "/"
+                        )
+                        props["Handler"] = info.handler
+                        if info.pip_packages:
+                            props["PipPackages"] = info.pip_packages
+                        env_vars = props.get("Environment", {}).get("Variables", {})
+                        env_vars.update(info.envs)
+                        props.setdefault("Environment", {})["Variables"] = env_vars
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to parse Dockerfile for function '%s': %s. "
+                            "Edit api_mock/config.yaml manually.",
+                            name,
+                            e,
+                        )
+                        props["CodeUri"] = docker_context_str + "/"
+                        props["Handler"] = "app.lambda_handler"
             events = props.pop("Events", {})
             if not events:
                 # authorizer etc.

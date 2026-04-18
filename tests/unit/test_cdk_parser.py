@@ -110,7 +110,7 @@ def test_apigateway_v2_route_parsing(temp_cdk_directory, sample_cdk_template):
 
 
 def test_lambda_container_image_support():
-    """Test support for Lambda container images"""
+    """Container Lambda: PackageType=Image is preserved; CodeUri comes from aws:asset:path."""
     container_template = {
         "Resources": {
             "ContainerLambda": {
@@ -143,9 +143,10 @@ def test_lambda_container_image_support():
         )
 
         assert api_props["PackageType"] == "Image"
-        # For container images, CodeUri should contain the image URI
-        expected_uri = "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-func:latest"
-        assert api_props["CodeUri"] == expected_uri
+        # CodeUri is derived from aws:asset:path (the local directory), not ImageUri
+        assert api_props["CodeUri"] == "lambda/container/"
+        # Handler defaults to app.lambda_handler when Dockerfile is not resolvable
+        assert api_props["Handler"] == "app.lambda_handler"
 
 
 def test_enhanced_error_handling():
@@ -258,13 +259,3 @@ def test_validate_cdk_structure():
     parser._whole = standard_cf_template
     result = parser._validate_cdk_structure()
     assert result is False
-
-
-def test_split_space_method():
-    """Test ImageInfo._split_space method for parsing Docker commands"""
-    from sapimo.parser.image_info import ImageInfo
-
-    src = 'ENV MY_NAME="Nori Asa" MY_DOG=Rex\\ The\\ Dog'
-    expected = ["ENV", 'MY_NAME="Nori Asa"', "MY_DOG=Rex The Dog"]
-    result = ImageInfo._split_space(src)
-    assert result == expected

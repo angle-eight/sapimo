@@ -23,24 +23,19 @@ src/sapimo/
 │   ├── sam_parser.py    # AWS SAM テンプレート解析
 │   ├── cdk_parser.py    # AWS CDK CloudFormation 出力解析
 │   ├── config_parser.py # config.yaml の読み込み・パース
-│   └── image_info.py    # Dockerfile 解析（Image PackageType の Lambda 用）
+│   └── container_lambda_parser.py  # Dockerfile 解析（Image PackageType の Lambda 用）
 │
 ├── mock/                # Mock 定義とAWSサービスモック
 │   ├── __init__.py      # api, change_input, options, monkeypatch を export
 │   ├── api.py           # MockRouter デコレータ（@api.get 等）、Monkeypatch
 │   ├── mock_manager.py  # AWS モック管理（S3Mock, DynamoMock, SqsMock 等）
-│   ├── mediator_route.py # FastAPI カスタム APIRoute（旧アーキテクチャ。現在は Gateway 側で処理）
-│   └── executer/        # Lambda 実行関連（旧アーキテクチャ部分を含む）
-│       ├── invoke_info.py
-│       └── lambda_invoker.py
+│   └── mediator_route.py # FastAPI カスタム APIRoute（旧アーキテクチャの名残。現在は Gateway 側で処理）
 │
-└── docker/              # Docker 関連の生成・管理
+├── docker/              # Docker 関連の生成・管理
     ├── __init__.py      # VolumeManager, DockerConfigManager, DockerMockManager を export
     ├── single_compose_generator.py  # 単一コンテナ docker-compose.yml 生成
-    ├── compose_generator.py         # マルチコンテナ compose 生成（現在は未使用）
-    ├── local_lambda_runner.py       # Lambda インプロセス実行エンジン
+    ├── local_lambda_runner.py       # Lambda インプロセス実行エンジン（ZIP 型 & コンテナ型）
     ├── mock_manager.py              # Docker 環境固有の AWS モック管理
-    ├── aws_mock_server.py           # AWS Mock 専用サーバー（マルチコンテナ用。現在は未使用）
     ├── config_manager.py            # sapimo-docker.yml 設定読み込み
     ├── volume_manager.py            # ボリューム・ファイル管理
     │
@@ -54,9 +49,9 @@ src/sapimo/
         ├── single/
         │   ├── Dockerfile           # 単一コンテナ用 Dockerfile（★ 現在のメイン）
         │   └── requirements.txt
-        ├── aws_mock/                # AWS Mock 専用コンテナ（マルチコンテナ用）
+        ├── aws_mock/                # （未使用）
         └── lambda_runtime/
-            └── Dockerfile           # Lambda ランタイムコンテナ（マルチコンテナ用）
+            └── Dockerfile           # Lambda ランタイムコンテナ（未使用）
 ```
 
 ---
@@ -115,7 +110,7 @@ FnResolver  ← CloudFormation 組込関数の解決
 - `_classification`: `AWS::Serverless::Function` のイベント（Api, HttpApi, S3 等）を解析
 - `_apis` に API パス → メソッド → Properties のマッピングを構築
 - Auth 情報（JWT, AWS_IAM, Cognito, Custom Lambda）も解析して `AuthType` に反映
-- `PackageType: Image` の場合は `ImageInfo` で Dockerfile を解析
+- `PackageType: Image` の場合は `ContainerLambdaDockerfileParser` で Dockerfile を解析。`CodeUri = DockerContext`、`PipPackages` を config.yaml に出力
 
 #### `cdk_parser.py`
 - CDK 固有の課題: CodeUri が asset hash パスになる → ソースコードの MD5 ハッシュで逆引き
@@ -127,9 +122,12 @@ FnResolver  ← CloudFormation 組込関数の解決
 - config.yaml を読み込んで `apis` (パス→メソッド→設定) と `all_resource` を提供
 - `get_service_config(service)`: 指定サービス（s3, dynamodb 等）の設定を取得
 
-#### `image_info.py`
-- `PackageType: Image` の Lambda 用。Dockerfile を解析して CodeUri, Handler, Layers, ENV を抽出
-- COPY, ENV, CMD, ENTRYPOINT, WORKDIR を解釈
+#### `container_lambda_parser.py`
+- `PackageType: Image` の Lambda 用。Dockerfile を最小限パースして Handler, PipPackages, ENV を抽出
+- 抽出対象: `ENV`（環境変数）、`CMD`（Lambda ハンドラ）、`RUN pip install ...`（依存パッケージ）
+- `COPY`・`ADD`・`ENTRYPOINT`・`RUN`（pip 以外）は無視
+- `RUN pip install -r requirements.txt` は requirements.txt を展開してパッケージを収集
+- `ContainerLambdaInfo(handler, pip_packages, envs)` を返す
 
 ---
 
@@ -207,7 +205,9 @@ Gateway から呼ばれ、Lambda handler を同一プロセスで実行する。
 | メソッド | 責務 |
 |---------|------|
 | `execute(route_info, event)` | handler をインポートして実行。asyncio Lock で直列化 |
-| `_temporary_syspath(paths)` | CodeUri + Layers のパスを一時的に `sys.path` に追加・除去 |
+| `_ensure_lambda_venv(function_name, pip_packages)` | コンテナ型 Lambda 用の専用 venv を `api_mock/.lambda_venvs/{name}/` に作成・キャッシュ。`packages.hash` でパッケージリスト変化を検知して再作成 |
+| `_site_packages_path(venv_dir)` | venv の `lib/pythonX.Y/site-packages` パスを返す |
+| `_temporary_syspath(paths)` | CodeUri + Layers + venv site-packages のパスを一時的に `sys.path` に追加・除去 |
 | `_temporary_environ(new_env)` | 環境変数を一時的に置換・復元 |
 | `_build_lambda_environment(route_info)` | AWS 認証情報等のダミー環境変数を構築 |
 
@@ -243,10 +243,6 @@ Gateway から呼ばれ、Lambda handler を同一プロセスで実行する。
 
 Mock 関数が HTTP ステータスコード (int) を返した場合に、OpenAPI 定義ファイル (`api_mock/swagger.yaml` or `openapi.yaml`) から対応する example を解決して返す。
 
-#### `docker/compose_generator.py` — マルチコンテナ Compose 生成
-
-**現在は未使用**（単一コンテナ設計が採用されているため）。Gateway + 個別 Lambda コンテナ + AWS Mock コンテナの構成を生成する機能。将来のマルチコンテナ対応用。
-
 ---
 
 ### テスト
@@ -256,13 +252,16 @@ tests/unit/
 ├── test_cdk_parser.py                    # CdkCfParser のテスト
 ├── test_cf_resource_parser.py            # CfResourceParser のテスト
 ├── test_cognito_mock.py                  # CognitoMock / プレースホルダー解決のテスト
-├── test_compose_generator_docker_setup.py # DockerComposeGenerator のテスト
+├── test_container_lambda_parser.py       # ContainerLambdaDockerfileParser テスト
 ├── test_gateway_change_input_compat.py   # InputOverride 互換テスト
+├── test_gateway_custom_authorizer.py     # カスタム Lambda オーソライザーテスト
 ├── test_gateway_docs_routes.py           # 個別ルート登録・/docs ・ OpenAPI スキーマテスト
+├── test_gateway_event_format.py          # イベントフォーマット（v1/v2）テスト
 ├── test_gateway_jwt_authorizer_passthrough.py # JWT passthrough テスト
 ├── test_gateway_openapi_example.py       # OpenAPI example 返却テスト
 ├── test_gateway_options_mode.py          # Options mode テスト
-├── test_image_info.py                    # Dockerfile 解析テスト
+├── test_gateway_s3_trigger.py            # S3 トリガーテスト
+├── test_image_info.py                    # （削除済み）
 ├── test_local_lambda_runner.py           # LocalLambdaRunner テスト
 ├── test_main_single_container_flow.py    # CLI + 単一コンテナフローテスト
 ├── test_mock_handler_path_params.py      # MockRouter パラメータ解決テスト（FastAPI 委譲）

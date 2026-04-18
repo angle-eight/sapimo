@@ -53,6 +53,7 @@ python -m pytest tests/unit/test_single_compose_generator.py -q
 python -m pytest tests/unit/test_main_single_container_flow.py -q
 python -m pytest tests/unit/test_cdk_parser.py -q
 python -m pytest tests/unit/test_cf_resource_parser.py -q
+python -m pytest tests/unit/test_container_lambda_parser.py -q
 python -m pytest tests/unit/test_local_lambda_runner.py -q
 python -m pytest tests/unit/test_gateway_change_input_compat.py -q
 python -m pytest tests/unit/test_gateway_jwt_authorizer_passthrough.py -q
@@ -72,6 +73,7 @@ python -m pytest tests/unit/test_mock_handler_path_params.py -q
 | `port is already allocated` | 旧コンテナ残骸 or Compose project 名の衝突 | `docker compose down` で停止。project 名の一意化を確認 |
 | `config.yaml not found` | `sapimo init` 未実行 | `sapimo init` を実行させる。自動生成するフォールバックは入れない |
 | Lambda 実行時に `sys.path` が汚染される | `_temporary_syspath` の保存・復元が不完全 | `LocalLambdaRunner` の context manager を確認 |
+| コンテナ型 Lambda で `ModuleNotFoundError` | `PipPackages` が config.yaml にないまたは venv の作成失敗 | `api_mock/.lambda_venvs/{name}/packages.hash` を削除して venv を再作成させる。Dockerfile の `RUN pip install` が正しく解析されているか確認 |
 
 ---
 

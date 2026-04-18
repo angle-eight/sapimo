@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib
 import inspect
 import os
+import subprocess
 import sys
 import time
 import traceback
@@ -22,6 +24,7 @@ class LocalLambdaRunner:
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
+        self._venvs_root = project_root / "api_mock" / ".lambda_venvs"
         # In-process execution mutates os.environ and sys.path temporarily.
         # Serialize executions to avoid cross-request contamination.
         self._execution_lock = asyncio.Lock()
@@ -40,6 +43,16 @@ class LocalLambdaRunner:
         ]
 
         python_paths = [str(code_path)]
+
+        # Container Lambda: install pip packages into a dedicated venv and add site-packages
+        pip_packages = route_info.get("pip_packages", [])
+        if pip_packages:
+            site_packages = self._ensure_lambda_venv(function_name, pip_packages)
+            # venv site-packages take priority so they shadow sapimo's own deps only
+            # when a direct import conflict would occur; code_uri itself stays first
+            # so user code wins over its own installed packages.
+            python_paths.append(str(site_packages))
+
         for layer_path in layer_paths:
             python_paths.append(str(layer_path))
             python_paths.append(str(layer_path / "python"))
@@ -111,6 +124,57 @@ class LocalLambdaRunner:
         env.setdefault("AWS_EC2_METADATA_DISABLED", "true")
 
         return env
+
+    def _ensure_lambda_venv(self, function_name: str, pip_packages: list[str]) -> Path:
+        """Return the site-packages path for a per-Lambda venv.
+
+        Creates (or re-creates) the venv only when the package list changes.
+        Uses a hash file to detect changes cheaply.
+        """
+        venv_dir = self._venvs_root / function_name / "venv"
+        hash_file = self._venvs_root / function_name / "packages.hash"
+
+        packages_hash = hashlib.sha256(
+            "\n".join(sorted(pip_packages)).encode()
+        ).hexdigest()
+
+        if hash_file.exists() and hash_file.read_text().strip() == packages_hash:
+            # Package list unchanged — reuse existing venv
+            return self._site_packages_path(venv_dir)
+
+        # Create or re-create the venv
+        if venv_dir.exists():
+            import shutil
+
+            shutil.rmtree(venv_dir)
+
+        venv_dir.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(venv_dir)],
+            check=True,
+            capture_output=True,
+        )
+
+        venv_python = venv_dir / "bin" / "python"
+        subprocess.run(
+            [str(venv_python), "-m", "pip", "install", "--quiet", *pip_packages],
+            check=True,
+            capture_output=True,
+        )
+
+        hash_file.write_text(packages_hash)
+        return self._site_packages_path(venv_dir)
+
+    @staticmethod
+    def _site_packages_path(venv_dir: Path) -> Path:
+        """Locate the site-packages directory inside a venv."""
+        lib_dir = venv_dir / "lib"
+        # lib/pythonX.Y/site-packages
+        for child in lib_dir.iterdir():
+            candidate = child / "site-packages"
+            if candidate.is_dir():
+                return candidate
+        raise RuntimeError(f"site-packages not found under {venv_dir}")
 
     def _resolve_project_path(self, target_path: str) -> Path:
         path = Path(target_path)

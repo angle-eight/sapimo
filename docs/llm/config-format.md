@@ -46,6 +46,8 @@ paths:
         Timeout: <int>          # (オプション) タイムアウト秒
         MemorySize: <int>       # (オプション)
         PackageType: <string>   # (オプション) Zip | Image
+        PipPackages:            # (コンテナ型 Lambda のみ) Dockerfile の RUN pip install から収集
+          - <string>            # 例: boto3==1.26.0, requests>=2.28
 
 # ─── AWS リソース定義 ───
 s3:

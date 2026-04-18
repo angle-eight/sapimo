@@ -152,6 +152,7 @@ class LambdaGateway:
                             "Variables", {}
                         ),
                         "layers": properties.get("Layers", []),
+                        "pip_packages": properties.get("PipPackages", []),
                         "runtime": properties.get("Runtime", "python3.9"),
                         "method": method.upper(),
                         "path": path,
@@ -173,6 +174,7 @@ class LambdaGateway:
                     "code_uri": props.get("CodeUri", "./"),
                     "environment": props.get("Environment", {}).get("Variables", {}),
                     "layers": props.get("Layers", []),
+                    "pip_packages": props.get("PipPackages", []),
                     "runtime": props.get("Runtime", "python3.9"),
                 }
 
@@ -185,6 +187,7 @@ class LambdaGateway:
                     "code_uri": props.get("CodeUri", "./"),
                     "environment": props.get("Environment", {}).get("Variables", {}),
                     "layers": props.get("Layers", []),
+                    "pip_packages": props.get("PipPackages", []),
                     "runtime": props.get("Runtime", "python3.9"),
                 }
 

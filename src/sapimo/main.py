@@ -262,14 +262,57 @@ def start(host: str, port: int, build: bool):
 
         subprocess.run(cmd, env=env, check=True)
         click.echo(f"✅ Sapimo started at http://localhost:{port}")
-        click.echo("   Run 'sapimo log' to see logs.")
+        click.echo("   Run 'sapimo log lambda' to see Lambda execution logs.")
     except subprocess.CalledProcessError:
         click.echo("❌ Failed to start container")
     finally:
         os.chdir(original_cwd)
 
 
-@main.command()
+@main.group(invoke_without_command=True)
+@click.pass_context
+def log(ctx: click.Context):
+    """Show Sapimo logs.
+
+    Defaults to 'sapimo log lambda' (follow all Lambda function logs).
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(lambda_log, function_name=None, tail=50, no_follow=False)
+
+
+@log.command("lambda")
+@click.argument(
+    "function_name", required=False, default=None, metavar="[FUNCTION_NAME]"
+)
+@click.option(
+    "--tail",
+    default=50,
+    show_default=True,
+    help="Number of entries to show in --no-follow mode",
+)
+@click.option(
+    "--no-follow",
+    is_flag=True,
+    default=False,
+    help="Print recent logs and exit without following",
+)
+def lambda_log(function_name: str | None, tail: int, no_follow: bool):
+    """Show Lambda execution logs.
+
+    Without FUNCTION_NAME, shows logs for all Lambda functions merged by timestamp.
+    With FUNCTION_NAME, shows logs for that function only.
+    """
+    from sapimo.docker.log_reader import read_snapshot, follow
+
+    log_dir = WORKING_DIR / "log"
+
+    if no_follow:
+        read_snapshot(log_dir, function_name, tail)
+    else:
+        follow(log_dir, function_name)
+
+
+@log.command("container")
 @click.option(
     "--tail",
     default=100,
@@ -282,8 +325,8 @@ def start(host: str, port: int, build: bool):
     default=False,
     help="Print logs without following",
 )
-def log(tail: int, no_follow: bool):
-    """Show Sapimo container logs"""
+def container_log(tail: int, no_follow: bool):
+    """Show raw Docker container logs (for debugging Sapimo internals)."""
 
     compose_file = WORKING_DIR / "docker-compose.yml"
     if not compose_file.exists():
@@ -353,8 +396,6 @@ def status():
     original_cwd = os.getcwd()
     os.chdir(WORKING_DIR)
     try:
-        import json as _json
-
         result = subprocess.run(
             [
                 "docker",
@@ -395,19 +436,19 @@ def status():
 
                 if health == "unhealthy":
                     click.echo(f"⚠️  Unhealthy{port_info}")
-                    click.echo("   Run 'sapimo log' to check for errors.")
+                    click.echo("   Run 'sapimo log container' to check for errors.")
                 elif health == "starting":
                     click.echo(f"⏳ Starting...{port_info}")
                 else:
                     click.echo(f"✅ Running{port_info}")
             elif state == "exited":
                 click.echo(f"❌ Error (exited) - {status_text}")
-                click.echo("   Run 'sapimo log' to check for errors.")
+                click.echo("   Run 'sapimo log container' to check for errors.")
             elif state == "restarting":
                 click.echo(f"🔄 Restarting - {status_text}")
-                click.echo("   Run 'sapimo log' to check for errors.")
+                click.echo("   Run 'sapimo log container' to check for errors.")
             else:
-                click.echo(f"⏹  Stopped")
+                click.echo("⏹  Stopped")
     finally:
         os.chdir(original_cwd)
 

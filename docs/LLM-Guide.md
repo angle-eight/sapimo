@@ -80,7 +80,10 @@ Sapimo は、AWS バックエンドのローカル開発環境を手軽に再現
 │    │   └─ Mock 関数が InputOverride → 入力変更して Lambda  │
 │    │                                                     │
 │    └─ LocalLambdaRunner: Lambda をインプロセス実行          │
-│        ├─ CodeUri + Layers → 一時的に sys.path に追加     │
+        ├─ ZIP 型: CodeUri + Layers → 一時的に sys.path に追加
+        ├─ コンテナ型 (PackageType: Image):
+        │     PipPackages → api_mock/.lambda_venvs/{name}/
+        │     に専用 venv を作成。site-packages を sys.path に追加
 │        ├─ 環境変数を呼び出し単位で保存→適用→復元            │
 │        ├─ Monkeypatch: app.py の定義で関数差し替え         │
 │        └─ handler(event, context) を実行                  │
@@ -122,6 +125,7 @@ Sapimo は、AWS バックエンドのローカル開発環境を手軽に再現
 |------------|---------------|
 | CLI コマンドの追加・変更 | `src/sapimo/main.py` |
 | テンプレート解析ロジックの修正 | `src/sapimo/parser/sam_parser.py`, `cdk_parser.py`, `cf_resource_parser.py` |
+| Dockerfile 解析（コンテナ型 Lambda）の修正 | `src/sapimo/parser/container_lambda_parser.py` |
 | config.yaml のフォーマット変更 | `src/sapimo/parser/config_parser.py`, `cf_resource_parser.py` |
 | Mock API デコレータの変更 | `src/sapimo/mock/api.py`, `src/sapimo/mock/__init__.py` |
 | Gateway のルーティング・リクエスト処理 | `src/sapimo/docker/templates/gateway/main.py` |
@@ -145,6 +149,7 @@ python -m pytest tests/unit/test_single_compose_generator.py -q
 python -m pytest tests/unit/test_main_single_container_flow.py -q
 python -m pytest tests/unit/test_cf_resource_parser.py -q
 python -m pytest tests/unit/test_cdk_parser.py -q
+python -m pytest tests/unit/test_container_lambda_parser.py -q
 ```
 
 ---
