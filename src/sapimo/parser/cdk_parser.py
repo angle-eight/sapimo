@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sapimo.utils import LogManager
 from sapimo.parser.cf_resource_parser import CfResourceParser
+from sapimo.parser.container_lambda_parser import ContainerLambdaDockerfileParser
 from sapimo.constants import EventType, AuthType
 
 logger = LogManager.setup_logger(__file__)
@@ -236,11 +237,37 @@ class CdkCfParser(CfResourceParser):
         # Handle container images
         if package_type == "Image":
             api_props["PackageType"] = "Image"
-            image_uri = l_props.get("Code", {}).get("ImageUri", "")
-            api_props["CodeUri"] = image_uri or code_uri
-            # For container images, handler might be in CMD
-            if "Handler" not in api_props:
-                api_props["Handler"] = "app.lambda_handler"  # default
+            # code_uri is the aws:asset:path relative to the repo root
+            docker_context = self._repo_path / code_uri if code_uri else None
+            if docker_context and docker_context.exists():
+                try:
+                    info = ContainerLambdaDockerfileParser(docker_context).parse()
+                    api_props["CodeUri"] = (
+                        str(docker_context.relative_to(self._repo_path)) + "/"
+                    )
+                    api_props["Handler"] = info.handler
+                    if info.pip_packages:
+                        api_props["PipPackages"] = info.pip_packages
+                    env_vars = api_props.get("Environment", {}).get("Variables", {})
+                    env_vars.update(info.envs)
+                    api_props.setdefault("Environment", {})["Variables"] = env_vars
+                except Exception as e:
+                    logger.warning(
+                        "Failed to parse Dockerfile for container Lambda (CodeUri='%s'): %s. "
+                        "Edit api_mock/config.yaml manually.",
+                        code_uri,
+                        e,
+                    )
+                    api_props["CodeUri"] = code_uri + "/" if code_uri else ""
+                    api_props.setdefault("Handler", "app.lambda_handler")
+            else:
+                logger.warning(
+                    "Container Lambda asset path not found: '%s'. "
+                    "Edit api_mock/config.yaml manually.",
+                    docker_context,
+                )
+                api_props["CodeUri"] = code_uri + "/" if code_uri else ""
+                api_props.setdefault("Handler", "app.lambda_handler")
         else:
             handler_file = (
                 api_props.get("Handler", "").split(".")[0]

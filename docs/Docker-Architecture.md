@@ -23,7 +23,12 @@ Client Request
     -> Mock 定義あり: Mockを返却 or InputOverride で Lambda 実行
     -> Mock 定義なし: Lambda 実行
       -> LocalLambdaRunner (同一プロセス)
-        -> CodeUri + Layers を一時 sys.path に適用
+        -> ZIP 型 Lambda:
+             CodeUri + Layers を一時 sys.path に追加
+        -> コンテナ型 Lambda (PackageType: Image):
+             DockerContext を CodeUri として使用
+             PipPackages → api_mock/.lambda_venvs/{name}/ に専用 venv を作成
+             venv の site-packages を一時 sys.path に追加
         -> 呼び出し単位で環境変数を保存・適用・復元
         -> Lambda handler(event, context) を実行
   -> 必要時に mock データを同期
