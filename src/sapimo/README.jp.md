@@ -204,6 +204,37 @@ target は `app.bedrock_client.invoke_model` になります。
 
 ---
 
+# FastAPI アプリモード
+
+バックエンドを FastAPI で実装している場合（Lambda を使わない、または Lambda と併用する）、
+`--app` オプションを使うことで AWS モックを共有しながらローカル開発環境を構築できます。
+
+## FastAPI のみモード
+
+```bash
+sapimo init --app myapp.main:app
+sapimo start
+```
+
+全リクエストがユーザーの FastAPI アプリへ転送されます。
+
+## ハイブリッドモード（Lambda + FastAPI）
+
+```bash
+sapimo init --template template.yaml --app myapp.main:app
+sapimo start
+```
+
+`paths` に定義されたルートは Lambda が処理し、それ以外のリクエストはユーザーの FastAPI アプリへ転送されます。
+Lambda もユーザーアプリも同一プロセス内で動くため、moto の AWS モックは両者で共有されます。
+
+## 制約事項
+
+- **`api_mock/app.py` へのミドルウェア追加禁止**: `api_mock/app.py` はモックレスポンス定義専用ファイルです。`app.add_middleware(...)` 等のミドルウェア追加は行わないでください。動作を保証しません
+- **ユーザーアプリの lifespan**: `@asynccontextmanager lifespan` を持つユーザーアプリの lifespan イベントは、sapimo 経由では自動的に呼ばれません。lifespan に依存する初期化処理はモジュールロード時に行うか、lifespan なしの設計を推奨します
+
+---
+
 # データの扱い
 
 - S3/DynamoDB 等のモックデータは `data/` 配下に保持されます。

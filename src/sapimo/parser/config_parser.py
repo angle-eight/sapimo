@@ -26,11 +26,11 @@ class ConfigParser:
                 else:
                     raise Exception("config file must be json or yaml")
 
-            if "paths" not in obj:
-                raise Exception("paths key dose not exist in config file")
+            if "paths" not in obj and "app_module" not in obj:
+                raise Exception("paths or app_module key must exist in config file")
             # paths = {}
             self.apis: dict[str, dict[str, dict]] = {}
-            for path, val in obj["paths"].items():
+            for path, val in obj.get("paths", {}).items():
                 # method_props = {}
                 self.apis[path] = {}
                 for k, v in val.items():
