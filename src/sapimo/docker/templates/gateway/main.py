@@ -4,6 +4,7 @@ FastAPI Gateway メインアプリケーション
 Lambda コンテナとのルーティング・連携を処理
 """
 
+import asyncio
 import datetime
 import json
 import os
@@ -56,6 +57,7 @@ class LambdaGateway:
         self.authorizer_lambdas: dict[str, dict] = {}
         self.triggered_lambdas: dict[str, dict] = {}
 
+        self.user_app: Any = None
         self.mock_handler = MockHandler()
 
         self._setup_middleware()
@@ -70,6 +72,12 @@ class LambdaGateway:
 
         self.mock_handler.reload_mock_definitions()
         self.mock_handler.start_file_watcher()
+
+        if self.user_app is not None:
+            try:
+                asyncio.get_running_loop().create_task(self._watch_user_app())
+            except RuntimeError:
+                pass
 
     def _initialize_local_mock_manager(self):
         if not self.config_path.exists():
@@ -197,6 +205,16 @@ class LambdaGateway:
                     f"  {route} -> {info['function_name']} ({self.lambda_containers[info['function_name']]})"
                 )
 
+            app_module_str = config.get("app_module")
+            if app_module_str:
+                import importlib
+                import sys
+
+                sys.path.insert(0, str(self.project_root))
+                mod_str, attr = app_module_str.rsplit(":", 1)
+                self.user_app = getattr(importlib.import_module(mod_str), attr)
+                logger.info("Loaded user FastAPI app: %s", app_module_str)
+
         except Exception as e:
             logger.exception(f"ERROR loading configuration: {e}")
 
@@ -272,6 +290,8 @@ class LambdaGateway:
             method = request.method
             matched_route = self._find_matching_route(method, path)
             if not matched_route:
+                if self.user_app is not None:
+                    return await self._forward_to_user_app(request)
                 if options.mode == "mock":
                     return JSONResponse(
                         content={"message": "Default mock response"},
@@ -396,6 +416,77 @@ class LambdaGateway:
             )
 
         return await self._invoke_lambda(route_info, request, path)
+
+    _CORS_HEADERS = frozenset(
+        {
+            "access-control-allow-origin",
+            "access-control-allow-methods",
+            "access-control-allow-headers",
+            "access-control-allow-credentials",
+            "access-control-expose-headers",
+            "access-control-max-age",
+        }
+    )
+
+    async def _forward_to_user_app(self, request: Request) -> Response:
+        """Lambda \u30eb\u30fc\u30c8\u306b\u4e00\u81f4\u3057\u306a\u3044\u30ea\u30af\u30a8\u30b9\u30c8\u3092\u30e6\u30fc\u30b6\u30fc\u306e FastAPI \u30a2\u30d7\u30ea\u3078\u8ee2\u9001\u3059\u308b\u3002
+        httpx.ASGITransport \u3092\u4f7f\u3046\u3053\u3068\u3067\u30cd\u30c3\u30c8\u30ef\u30fc\u30af\u3092\u4ecb\u3055\u305a\u30a4\u30f3\u30d7\u30ed\u30bb\u30b9\u3067\u8ee2\u9001\u3059\u308b\u3002
+        Gateway \u5074\u306e CORS \u30df\u30c9\u30eb\u30a6\u30a7\u30a2\u304c\u518d\u5ea6\u4ed8\u4e0e\u3059\u308b\u305f\u3081\u3001\u30e6\u30fc\u30b6\u30fc\u30a2\u30d7\u30ea\u304c\u8fd4\u3057\u305f CORS \u30d8\u30c3\u30c0\u30fc\u3092\u9664\u53bb\u3059\u308b\u3002
+        """
+        body = await request.body()
+        transport = httpx.ASGITransport(app=self.user_app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            response = await client.request(
+                method=request.method,
+                url=str(request.url),
+                headers=dict(request.headers),
+                content=body,
+            )
+        filtered_headers = {
+            k: v
+            for k, v in response.headers.items()
+            if k.lower() not in self._CORS_HEADERS
+        }
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=filtered_headers,
+        )
+
+    async def _watch_user_app(self) -> None:
+        """\u30e6\u30fc\u30b6\u30fc\u306e FastAPI \u30a2\u30d7\u30ea\u30e2\u30b8\u30e5\u30fc\u30eb\u306e\u5909\u66f4\u3092\u76e3\u8996\u3057\u3066\u52d5\u7684\u518d\u30ed\u30fc\u30c9\u3059\u308b\u3002"""
+        import importlib
+        import sys
+        from pathlib import Path as _Path
+
+        app_module_str = os.environ.get("SAPIMO_APP_MODULE", "")
+        if not app_module_str:
+            return
+
+        mod_str, attr = app_module_str.rsplit(":", 1)
+        mod = sys.modules.get(mod_str)
+        if mod is None or not getattr(mod, "__file__", None):
+            return
+
+        watch_path = _Path(mod.__file__)
+        last_mtime = watch_path.stat().st_mtime
+
+        while True:
+            await asyncio.sleep(1)
+            try:
+                current_mtime = watch_path.stat().st_mtime
+                if current_mtime == last_mtime:
+                    continue
+                last_mtime = current_mtime
+                if mod_str in sys.modules:
+                    del sys.modules[mod_str]
+                new_mod = importlib.import_module(mod_str)
+                self.user_app = getattr(new_mod, attr)
+                logger.info("Reloaded user FastAPI app: %s", mod_str)
+            except Exception:
+                logger.exception("Failed to reload user FastAPI app")
 
     def _find_matching_route(self, method: str, path: str) -> dict:
         """パスパターンマッチングでルートを検索"""

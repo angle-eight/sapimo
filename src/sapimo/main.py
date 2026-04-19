@@ -50,7 +50,20 @@ def main():
         "Generate with: terraform plan -out=tfplan && terraform show -json tfplan > plan.json"
     ),
 )
-def init(template, cdk, tf_plan):
+@click.option(
+    "--app",
+    "app_module",
+    type=str,
+    default="",
+    help=(
+        "FastAPI app in 'module.path:attr' format (e.g. myapp.main:app). "
+        "Enables FastAPI app mode. Combine with --template to run Lambda routes alongside."
+    ),
+)
+def init(template, cdk, tf_plan, app_module):
+    if app_module and not template and not tf_plan:
+        create_config_for_fastapi_app(app_module)
+        return
     if tf_plan:
         plan_path = Path(tf_plan).resolve()
         if not create_config_from_terraform(plan_path, overwrite=False):
@@ -72,6 +85,44 @@ def init(template, cdk, tf_plan):
             )
             create_config_template(CONFIG_FILE)
             exit()
+
+    if app_module and CONFIG_FILE.exists():
+        _append_app_module_to_config(CONFIG_FILE, app_module)
+
+
+def create_config_for_fastapi_app(app_module: str) -> None:
+    """FastAPI \u306e\u307f\u30e2\u30fc\u30c9\u7528\u306e config.yaml \u3068 docker-compose.yml \u3092\u751f\u6210\u3059\u308b\u3002"""
+    import yaml
+
+    WORKING_DIR.mkdir(exist_ok=True)
+    if CONFIG_FILE.exists():
+        click.echo(f"{CONFIG_FILE} already exists. Edit 'app_module' field manually.")
+        return
+
+    config = {
+        "app_module": app_module,
+    }
+    with open(CONFIG_FILE, "w") as f:
+        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+    click.echo(f"Generated {CONFIG_FILE}")
+
+    from sapimo.docker.single_compose_generator import SingleContainerComposeGenerator
+
+    compose_gen = SingleContainerComposeGenerator(CONFIG_FILE)
+    compose_gen.generate_compose_file()
+    click.echo(f"Generated docker-compose.yml in {WORKING_DIR}")
+
+
+def _append_app_module_to_config(config_file: Path, app_module: str) -> None:
+    """config.yaml \u306b app_module \u30d5\u30a3\u30fc\u30eb\u30c9\u3092\u8ffd\u8a18\u3059\u308b\u3002"""
+    import yaml
+
+    with open(config_file) as f:
+        config = yaml.safe_load(f) or {}
+    config["app_module"] = app_module
+    with open(config_file, "w") as f:
+        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+    click.echo(f"Added app_module to {config_file}")
 
 
 def create_config_default():

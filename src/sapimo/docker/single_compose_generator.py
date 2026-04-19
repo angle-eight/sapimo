@@ -92,9 +92,27 @@ class SingleContainerComposeGenerator:
             return (int(parts[0]), int(parts[1]))
         return None
 
+    def _detect_app_module(self) -> str | None:
+        """config.yaml に app_module が定義されていれば返す。"""
+        if not self.config_path.exists():
+            return None
+        with open(self.config_path) as f:
+            config = yaml.safe_load(f) or {}
+        return config.get("app_module") or None
+
     def generate_compose_config(self) -> dict[str, Any]:
         python_version = self._resolve_python_version()
+        app_module = self._detect_app_module()
         logger.info("Using Python %s for single-container runtime", python_version)
+        env: dict[str, str] = {
+            "SAPIMO_MODE": "single-container",
+            "SAPIMO_SINGLE_CONTAINER": "1",
+            "SAPIMO_HOST": "0.0.0.0",
+            "SAPIMO_PORT": "3000",
+            "PYTHONPATH": "/workspace:/workspace/api_mock/docker",
+        }
+        if app_module:
+            env["SAPIMO_APP_MODULE"] = app_module
         return {
             "services": {
                 "sapimo": {
@@ -108,13 +126,7 @@ class SingleContainerComposeGenerator:
                     },
                     "command": ["python", "/workspace/api_mock/docker/gateway/main.py"],
                     "ports": ["${SAPIMO_PORT:-8000}:3000"],
-                    "environment": {
-                        "SAPIMO_MODE": "single-container",
-                        "SAPIMO_SINGLE_CONTAINER": "1",
-                        "SAPIMO_HOST": "0.0.0.0",
-                        "SAPIMO_PORT": "3000",
-                        "PYTHONPATH": "/workspace:/workspace/api_mock/docker",
-                    },
+                    "environment": env,
                     "volumes": [
                         "..:/workspace:rw",
                     ],
