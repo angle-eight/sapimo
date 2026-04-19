@@ -17,3 +17,7 @@ class SamTemplateParseError(SapimoException):
 
 class DockerFileParseError(SapimoException):
     pass
+
+
+class TerraformPlanParseError(SapimoException):
+    pass
