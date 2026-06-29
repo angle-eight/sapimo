@@ -20,12 +20,19 @@ class SamParser(CfResourceParser):
         """
         self._api_resources = {}
         self._http_api_resources = {}
+        self._function_globals = {}
+        self._api_globals = {}
+        self._http_api_globals = {}
         super()._preprocess(filepath, region)
         # extract global settings and resolve Fn
         g_props = self._whole.get("Globals", {})
         self._function_globals = self._treat(g_props.get("Function", {}))
         self._api_globals = self._treat(g_props.get("Api", {}))
         self._http_api_globals = self._treat(g_props.get("HttpApi", {}))
+        for resource in self._api_resources.values():
+            add_element(resource["Properties"], self._api_globals)
+        for resource in self._http_api_resources.values():
+            add_element(resource["Properties"], self._http_api_globals)
         # self._table_globals = self._treat(g_props.get("SimpleTable",{}))
 
         # additional member
@@ -38,7 +45,7 @@ class SamParser(CfResourceParser):
         props: dict = deepcopy(val.get("Properties", {}))
         if val["Type"] == "AWS::Serverless::Function":
             add_element(props, self._function_globals)
-            if props["PackageType"] == "Image":
+            if props.get("PackageType") == "Image":
                 metadata = val.get("Metadata", {})
                 docker_context_str = metadata.get("DockerContext", "")
                 dockerfile_name = metadata.get("Dockerfile", "Dockerfile")
@@ -189,13 +196,13 @@ class SamParser(CfResourceParser):
             return {"Ref": name, "Arn": self._arn_tmp.format("function", name)}
         elif tp == "AWS::Serverless::Api":
             props: dict = deepcopy(props)
-            add_element(props, self._api_globals)
-            self._api_resources[name] = props
+            add_element(props, getattr(self, "_api_globals", {}))
+            self._api_resources[name] = {"Properties": props}
             return {"Ref": name}
         elif tp == "AWS::Serverless::HttpApi":
             props: dict = deepcopy(props)
-            add_element(props, self._http_api_globals)
-            self._http_api_resources[name] = props
+            add_element(props, getattr(self, "_http_api_globals", {}))
+            self._http_api_resources[name] = {"Properties": props}
             return {"Ref": name}  # resource ip id
         elif tp == "AWS::Serverless::Application":
             return {

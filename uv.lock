@@ -642,6 +642,18 @@ wheels = [
 ]
 
 [[package]]
+name = "joserfc"
+version = "1.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/26/abe1ad855eb334b5ebc9c6495d4798e12bee70e5e8e815d54570710b8312/joserfc-1.7.2.tar.gz", hash = "sha256:537ffb8888b2df039cb5b6d017d7cff6f09d521ce65d89cc9b8ab752b1cff947", size = 233183, upload-time = "2026-06-29T09:03:10.868Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/80/d1b30336582cced4dce0dae776508a6011723e32f907bc7a702c0b25890a/joserfc-1.7.2-py3-none-any.whl", hash = "sha256:ddd818c0ca9b4f17bbc2d72cb3966e6ded7502be089316c62c3cc64ae86132b5", size = 70426, upload-time = "2026-06-29T09:03:09.393Z" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1215,6 +1227,7 @@ dependencies = [
     { name = "click" },
     { name = "fastapi", extra = ["standard"] },
     { name = "httpx" },
+    { name = "joserfc" },
     { name = "moto" },
     { name = "python-jose", extra = ["cryptography"] },
     { name = "pyyaml" },
@@ -1234,6 +1247,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.3.1" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.135.2" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "joserfc", specifier = ">=1.0.0" },
     { name = "moto", specifier = ">=5.1.22" },
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.5.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
