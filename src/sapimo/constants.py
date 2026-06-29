@@ -5,14 +5,25 @@ WORKING_DIR = Path.cwd() / "api_mock"
 API_FILE = WORKING_DIR / "app.py"
 CONFIG_FILE = WORKING_DIR / "config.yaml"
 
+# sapimo がサポートする Python バージョン (Docker ランタイム用)
+# pyproject.toml の requires-python (>=3.12) と整合させる
+SUPPORTED_PYTHON_VERSIONS: list[str] = ["3.12", "3.13"]
+DEFAULT_PYTHON_VERSION: str = "3.12"
+
 
 class EventType(Enum):
     APIGW = 1
     APIGW_V2 = 2
+    EVENTBRIDGE = 3
+    S3 = 4
+    DYNAMODB = 5
+    SQS = 6
+    SNS = 7
 
 
 class AuthType(Enum):
-    """ Authorization Type in AWS::APIGateway(V1 and V2) """
+    """Authorization Type in AWS::APIGateway(V1 and V2)"""
+
     NONE = 0
     JWT = 1
     AWS_IAM = 2
@@ -20,3 +31,8 @@ class AuthType(Enum):
     CUSTOM_TOKEN = 4
     CUSTOM_REQUEST = 5
     COGNITO_USER_POOLS = 6
+    # Additional auth types for modern CDK
+    OAUTH2 = 7
+    OPENID_CONNECT = 8
+    API_KEY = 9
+    RESOURCE_POLICY = 10

@@ -1,35 +1,44 @@
-[tool.poetry]
+[project]
 name = "sapimo"
 version = "0.0.1"
 description = "SAM(lambda-APIgateway) API Mock"
-authors = ["ajinori"]
+authors = [{ name = "ajinori" }]
+requires-python = ">=3.12,<4"
 readme = "README.md"
-packages = [{include = "sapimo", from = "src"}]
+dependencies = [
+    "httpx>=0.28.1",
+    "fastapi[standard]>=0.135.2",
+    "python-jose[cryptography]>=3.5.0",
+    "pyyaml>=6.0.3",
+    "boto3>=1.42.75",
+    "moto>=5.1.22",
+    "joserfc>=1.0.0",
+    "click>=8.3.1",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8.1"
-fastapi = "^0.88.0"
-uvicorn = {extras = ["standard"], version = "^0.21.1"}
-awscli = "^1.27.45"
-moto = "^4.0.13"
-boto3 = "^1.26.45"
-python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+[project.scripts]
+sapimo = "sapimo.main:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.1.0",
+    "pytest-env>=1.6.0",
+    "pytest-mock>=3.15.1",
+]
 
-[tool.poetry.group.dev.dependencies]
-flake8 = "^6.0.0"
-autopep8 = "^2.0.1"
-pytest = "^7.2.0"
-pytest-mock = "^3.10.0"
-pytest-cov = "^4.0.0"
-pytest-env = "^0.8.1"
+[tool.hatch.build.targets.sdist]
+include = ["src/sapimo", "src/sapimo/docker/templates"]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/sapimo", "src/sapimo/docker/templates"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/sapimo" = "sapimo"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.scripts]
-sapimo = "src.sapimo.main:main"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

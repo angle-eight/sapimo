@@ -1,0 +1,13 @@
+# AWS Mock Requirements
+# moto ベースのAWSサービスモック専用依存関係
+
+# AWS Mocking
+moto[all]>=5.0.0,<6
+boto3>=1.26.45,<2
+
+# HTTP Server
+fastapi>=0.88.0,<0.115
+uvicorn[standard]>=0.21.1,<0.32
+
+# Data Serialization
+pyyaml>=6.0
