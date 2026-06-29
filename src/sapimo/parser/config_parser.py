@@ -4,12 +4,13 @@ import json
 import yaml
 
 from sapimo.utils import LogManager
+
 logger = LogManager.setup_logger(__file__)
 
 
 class ConfigParser:
     """
-        read config.yaml and convert to useful form
+    read config.yaml and convert to useful form
     """
 
     def __init__(self, path: Path):
@@ -25,20 +26,20 @@ class ConfigParser:
                 else:
                     raise Exception("config file must be json or yaml")
 
-            if "paths" not in obj:
-                raise Exception("paths key dose not exist in config file")
+            if "paths" not in obj and "app_module" not in obj:
+                raise Exception("paths or app_module key must exist in config file")
             # paths = {}
             self.apis: dict[str, dict[str, dict]] = {}
-            for path, val in obj["paths"].items():
+            for path, val in obj.get("paths", {}).items():
                 # method_props = {}
                 self.apis[path] = {}
                 for k, v in val.items():
                     method = k.lower()
                     self.apis[path][method] = v
             self.triggered = obj.get("triggered", {})
-        except:
+        except Exception as e:
             logger.exception("config parse error")
-            raise Exception("config parse error")
+            raise Exception("config parse error") from e
 
         self.all_resource = obj
 

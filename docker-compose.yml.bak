@@ -1,0 +1,54 @@
+networks:
+  sapimo-network:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.20.0.0/16
+services:
+  sapimo-aws-mock:
+    build:
+      context: .
+      dockerfile: docker/aws-mock/Dockerfile
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_SERVICES: ''
+      SAPIMO_MODE: aws-mock
+    image: sapimo-aws-mock:latest
+    networks:
+    - sapimo-network
+    ports:
+    - 4566:4566
+    volumes:
+    - ./data:/data:rw
+    - sapimo-data:/persistent-data
+  sapimo-gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway/Dockerfile
+    depends_on:
+    - sapimo-aws-mock
+    environment:
+      LAMBDA_DISCOVERY_NETWORK: sapimo-network
+      SAPIMO_MODE: gateway
+    image: sapimo-gateway:latest
+    networks:
+    - sapimo-network
+    ports:
+    - ${SAPIMO_PORT:-3000}:3000
+    volumes:
+    - ./api_mock:/workspace/api_mock:rw
+    - ./src:/workspace/src:ro
+  lambda-test-get:
+    build:
+      context: ./lambda/test
+      dockerfile: Dockerfile
+    environment:
+      BUCKET_NAME: test-bucket
+      TABLE_NAME: test-table
+    image: lambda-test-get:latest
+    networks:
+    - sapimo-network
+version: '3.8'
+volumes:
+  sapimo-data: {}
+  sapimo-logs: {}

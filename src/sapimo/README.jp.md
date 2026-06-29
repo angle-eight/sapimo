@@ -1,145 +1,262 @@
 # これは何？
-AWS SAMを利用してlambda+APIGatewayでAPIを作っているときに使えるMockAPIを生成するためのモジュールです。コンテナを使用せずローカル環境で動作します。
-フロント開発用APIモックの多機能版といった感じ。
-`sam local start-api`の代わりとして使うために作成しました。
-(ちなみに大部分がFastAPIとmotoの機能で成り立ってます。)
+AWS SAM/CDK の設定をもとに、Docker 上で API Gateway + Lambda + AWS モックをローカル実行するツールです。
+`sam local start-api` の代替として、フロント連携を含む開発時のAPI確認を行う用途を想定しています。
 
-特徴
-- 高速な起動と呼び出し (コンテナビルドないので)
-- 手元でlambdaコード変更しても即時反映　(sam build不要)
-- lambdaコードを書き換えずにAPIの動作を変更可能
-- S3およびDynamoDBも裏側でモック
-- S3およびDynamoDB内のデータをローカルで確認可能
+サポート対象（モック）:
+- API Gateway / Lambda
+- S3 / DynamoDB / SQS / SNS / SES
 
-`sam local start-api`に比べ明らかに劣る点
-- AWS実環境との環境差異が大きい
-- 今のところ動作環境はあらかじめ用意しておく必要がある
-- python+SAMでしか使えない
+---
 
-Webアプリ作成時に細かな環境差異は気にせずフロントとAPIのコードを連携させて動作を確認しながら開発を進める時用という位置づけです。
+# クイックスタート
 
-結合テストでの利用は想定してません。
+## 前提
+- Docker / Docker Compose が利用可能
+- プロジェクトルートに `template.yaml`（または CDK の CloudFormation 出力）がある
 
-# 使い方
-lambdaコード実行に必要な仮想環境は起動しておいてください。
+## 起動手順
+```bash
+# 1) template から api_mock/config.yaml を生成
+sapimo init
 
-`pip install sapimo`
-(template.yamlのあるディレクトリで)
-`python -m sapimo run --port 3000`
-これで3000番ポートでmockAPIが起動します。
-(portを省略した場合3000番ポートで起動します)
+# 2) api_mock/app.py にモック雛形を生成（必要な場合のみ）
+sapimo generate
 
-# (option) API編集
-api_mock下のappを編集することでAPIの動作を変更できます。
-
-### パラメータの検証
-FAST apiの機能でAPIのパラメータを検証できます。
-``` python
-@ lambda_mock.get("/hello/{date}")
-async def hello_get_mock(date: int):
-    return
-```
-dateに文字列など入って呼び出された場合に,lambdaコード実行前にエラーを返すようになります。
-
-### 入力すり替え
-呼び出し時のパラメータを無視して、指定の値でlambdaコードを実行できます。
-``` python
-from sapimo import change_input
-@ lambda_mock.get("/hello/{date}")
-async def hello_get_mock(date: int):
-    return change_input(date=3)
-```
-呼び出し時の値に関わらずdate=3でlambdaコードが実行されます。
-
-
-### なにもしないmockとして動作
-紐づけたlambdaコードを実行せずに指定した値を返すことができます。
-``` python
-@ lambda_mock.get("/hello/{date}")
-async def hello_get_mock(date: int):
-    return {"message":"hello 11"}
-```
-returnでなんらかの値(dict,str)を返した場合、lambdaコードは実行されず、値がそのまま返ります
-
-### コードを指定して(Open API定義連携時) exampleを返す
-紐づけたlambdaコードを実行せずにOpenAPIで定義されたダミーを返す
-``` python
-@ lambda_mock.get("/hello/{date}")
-async def hello_get_mock(date: int):
-    return 200
-```
-responsesの200もしくは2xxで最初に見つかったexampleを返します。
-見つからない場合ステータスコードのみ返します。
-
-### 一括設定
-一部のAPIで入力値すり替えや、exampleを返すようにしたものの、すべて普通にlambdaコードを実行させるようにしたい場合
-``` py
-options.set(mode.api)
+# 3) Docker で起動
+sapimo start
 ```
 
-すべてのAPIでlambdaコードを使わずmockかexampleを返したい。設定してないものは{status:200}だけ返してくれればいい場合
-```py
-options.set(mode.mock)
+デフォルトで `http://localhost:8000` で待ち受けます。
+
+> 注意: `sapimo` 本体を更新した場合（`pip install -U sapimo` や `pip install -e .` 後）は、
+> `api_mock/docker/` に展開される実行テンプレートを最新化するため **`sapimo init` を再実行** してください。
+
+---
+
+# Swagger APIドキュメント
+
+起動後、ブラウザで以下のURLにアクセスすると、登録済みの全エンドポイントをSwagger UIで確認できます。
+
+```
+http://localhost:8000/docs
 ```
 
-すべてのAPIでlambdaコードを使わずmockかexampleのエラーを返したい。設定してないものは{status:400}だけ返してくれればいい場合
-```py
-options.set(mode.mock, status=400)
-```
-(以下、未実装)
-## AWS-CDKを使っている場合
-`cdk synth`をしてから`python -m sapimo run`
+- `config.yaml` に定義されたルートが自動で一覧表示されます
+- パスの先頭セグメント（例: `/users/{id}` → `users`）でタグ別にグルーピングされます
+- **Try it out** ボタンから直接リクエストを送信してテストできます
 
-## SAMやCDKを使っていない場合
-`sapimock init`
-api_mock/config.yamlのダミーファイルが生成されるので編集する。
-APIと実行ファイルを紐づける。
+OpenAPI JSON は `http://localhost:8000/openapi.json` で取得できます。
+
+## リクエスト/レスポンス型の表示
+
+`api_mock/swagger.yaml` または `api_mock/openapi.yaml` が存在する場合、
+定義されている requestBody / responses / schemas が Swagger UI に自動マージされます。
 
 ```yaml
+# api_mock/swagger.yaml の例
 paths:
-  "/hello-world":             # API path
-    get:                     # method：(post/get/put/delete)
-      handler:
-        "hello_world.app.lambda_handler" # python code path (dir.dir.file.func)
-  "/hello/{date}":      # "date" is path parameter
-    get:
-      handler:
-        "hello_get.app.lambda_handler"
-      layer:               # if lambda uses same layer,
-        - "my_layer/"      # you should set layer path
+  /users:
     post:
-      handler:
-        "hello_post.app.lambda_handler"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '200':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+components:
+  schemas:
+    CreateUserRequest:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
 ```
 
-# 起動
-`sapimock run  [-s ./swagger.yaml]`
--s でOpenAPIの定義ファイルを指定するとexampleなど一部情報を利用できる。
+> この OpenAPI spec は [example 返却機能](#4-openapi-exampleを返す) と共用です。
+> 一つのファイルで型情報と example の両方を管理できます。
 
+---
 
+# APIモックの編集
 
-# sam local start-apiに比べ
-## pros
-### 起動が高速
+`api_mock/app.py` を編集することで、Lambdaコードを書き換えずにAPI挙動を制御できます。
 
-### 変更が即反映
+```python
+from sapimo.mock import api, change_input, options
 
-### s3, dynamoのmock込
+@api.get("/hello/{date}")
+async def hello_get_mock(date: int):
+   return None
+```
 
+## 1) Lambdaを実行する（デフォルト）
+`return None` を返すと、紐づいたLambdaを実行します。
 
-## cons
-### 複雑な構成だとconfig.yamlの手編集が必要
-sapimockではtemplate.yamlをパースしてconfig.yamlを作成します。
-基本的にAPIのパスと実行ファイルを紐づけるだけなのでシンプルなzipタイプのlambdaであれば問題なく生成できるのですが、少し複雑になると場合によってはconfig.yamlがおかしくなる可能性があります。
-具体的にはImageタイプのラムダでdocker file内でいろいろやってたり、zipタイプでも別のとこからlayerを参照してたりとかの場合はうまくいきません。(未検証)
-この場合はconfig.yamlを自分で編集してあげる必要があります。
+## 2) スタブを返す
+```python
+@api.get("/hello/{date}")
+async def hello_get_mock(date: int):
+   return {"message": "hello mock"}
+```
 
-### 実行環境はあらかじめ用意しておく必要がある。
-sam localではコンテナで実行環境をまるっと用意してくれますが、sapimockではlambdaのコードはそのまま呼び出されるため、コード実行に必要な環境は用意して有効化しておく必要があります。
-一つの仮想環境でまとめて開発、テストなどしてる場合はそのまま使えるので問題はないですが、lambdaごとに実行環境を別に用意して開発してる場合などはちょっと面倒かもしれません。
+## 3) 入力をすり替えてLambdaを実行する
+```python
+@api.get("/hello/{date}")
+async def hello_get_mock(date: int):
+   return change_input(date=3)
+```
 
-### lambdaごとにpythonのバージョンが違うと使えない
-sam localではlambdaごとに環境が用意されますが、sapimockでは すべてのlambdaが同じ環境で動くため、pythonバージョン依存のコード多くある場合は利用が難しいです。そこまで厳密ではなければ基本的に新しいバージョンで環境を用意しておいて、バージョン差異が出る部分だけsam local で確認するという使い方になると思います。
+明示的に指定する場合:
+```python
+return change_input(pathParameters={"date": "3"})
+```
 
-### pythonじゃないと使えない。
-lambdaがpythonじゃないと使えません。これは
+## 4) OpenAPI exampleを返す
+```python
+@api.get("/hello/{date}")
+async def hello_get_mock(date: int):
+   return 200
+```
+
+`api_mock/swagger.yaml` または `api_mock/openapi.yaml` が存在する場合、
+該当パス/ステータスの example を返します。見つからない場合はステータスのみ返します。
+
+## 5) 全体モードを切り替える
+```python
+options.set_api_mode()        # 通常モード
+options.set_mock_mode(200)    # 全体Mockモード（デフォルト200）
+options.set_mock_mode(400)    # 全体Mockモード（デフォルト400）
+```
+
+旧API互換:
+```python
+options.set("api")
+options.set("mock", status=400)
+```
+
+---
+
+# Lambda内の関数を差し替える（monkeypatch）
+
+`monkeypatch.setattr` を使うと、Lambda実行時に特定の関数を差し替えることができます。
+motoでサポートされていないAWSサービス（Bedrock等）の呼び出しを差し替える場合に便利です。
+
+パッチはLambda実行中のみ有効で、実行後は自動的に元に戻ります。
+
+```python
+from sapimo.mock import api, monkeypatch
+import io
+
+# デコレータ形式: Bedrock の invoke_model を差し替え
+@monkeypatch.setattr("app.bedrock_client.invoke_model")
+def mock_invoke_model(**kwargs):
+    import json
+    return {
+        "body": io.BytesIO(json.dumps({
+            "content": [{"text": "これはモックレスポンスです"}]
+        }).encode()),
+        "contentType": "application/json",
+    }
+
+# Lambda は通常通り実行。invoke_model の呼び出しだけが差し替わる
+@api.post("/chat")
+async def chat():
+    pass
+```
+
+命令形式（pytest風）も使えます:
+```python
+monkeypatch.setattr("app.bedrock_client.invoke_model",
+    lambda **kwargs: {"body": io.BytesIO(b'{"content": [{"text": "mock"}]}'), "contentType": "application/json"})
+```
+
+**注意**: target はモジュール内で名前が**使われている場所**を指定します（`unittest.mock.patch` と同じルール）。
+
+例えば Lambda コードが以下の場合:
+```python
+# lambda/chat/app.py
+import boto3
+bedrock_client = boto3.client("bedrock-runtime")
+
+def lambda_handler(event, context):
+    response = bedrock_client.invoke_model(modelId="anthropic.claude-v2", body=...)
+```
+
+target は `app.bedrock_client.invoke_model` になります。
+
+---
+
+# FastAPI アプリモード
+
+バックエンドを FastAPI で実装している場合（Lambda を使わない、または Lambda と併用する）、
+`--app` オプションを使うことで AWS モックを共有しながらローカル開発環境を構築できます。
+
+## FastAPI のみモード
+
+```bash
+sapimo init --app myapp.main:app
+sapimo start
+```
+
+全リクエストがユーザーの FastAPI アプリへ転送されます。
+
+## ハイブリッドモード（Lambda + FastAPI）
+
+```bash
+sapimo init --template template.yaml --app myapp.main:app
+sapimo start
+```
+
+`paths` に定義されたルートは Lambda が処理し、それ以外のリクエストはユーザーの FastAPI アプリへ転送されます。
+Lambda もユーザーアプリも同一プロセス内で動くため、moto の AWS モックは両者で共有されます。
+
+## 制約事項
+
+- **`api_mock/app.py` へのミドルウェア追加禁止**: `api_mock/app.py` はモックレスポンス定義専用ファイルです。`app.add_middleware(...)` 等のミドルウェア追加は行わないでください。動作を保証しません
+- **ユーザーアプリの lifespan**: `@asynccontextmanager lifespan` を持つユーザーアプリの lifespan イベントは、sapimo 経由では自動的に呼ばれません。lifespan に依存する初期化処理はモジュールロード時に行うか、lifespan なしの設計を推奨します
+
+---
+
+# データの扱い
+
+- S3/DynamoDB 等のモックデータは `data/` 配下に保持されます。
+- コンテナ再起動後もデータを再利用できます（ボリューム設定による）。
+
+---
+
+# 旧記法との対応表（移行ガイド）
+
+| 旧仕様 | 新仕様 |
+|---|---|
+| `lambda_mock.get(...)` | `api.get(...)` |
+| `sapimock init` | `sapimo init` |
+| `sapimock run` | `sapimo start` |
+| `options.set(mode.api)` | `options.set_api_mode()` |
+| `options.set(mode.mock, status=400)` | `options.set_mock_mode(400)` |
+| `config.yaml: handler: "dir.file.func"` | `config.yaml: Properties.Handler / CodeUri` |
+
+---
+
+# 補足ドキュメント
+
+- Dockerセットアップ: `docs/Docker-Setup.md`
+- Dockerアーキテクチャ: `docs/Docker-Architecture.md`
+- 開発者向けの実装計画・検証記録: `docs/Container-Feature-Recovery-Plan.md`
