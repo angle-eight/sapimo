@@ -5,4 +5,4 @@ pyyaml>=6.0.3
 boto3>=1.43.119,<2
 moto[all]>=5.2.4,<6
 click>=8.5.0
-python-jose[cryptography]>=3.5.0
+joserfc>=1.7.7

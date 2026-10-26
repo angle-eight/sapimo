@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 from fastapi import Request as FastAPIRequest
-from jose import jwt
+from joserfc import jwt
+from joserfc.jwk import OctKey
 
 
 @pytest.fixture
@@ -59,7 +60,11 @@ def _make_request(scope):
 async def test_jwt_authtype_injects_unverified_claims(monkeypatch):
     gateway = _create_gateway(monkeypatch)
 
-    token = jwt.encode({"sub": "user-1", "scope": "read"}, "dummy", algorithm="HS256")
+    token = jwt.encode(
+        {"alg": "HS256"},
+        {"sub": "user-1", "scope": "read"},
+        OctKey.import_key("dummy-secret-key-0123456789abcdef"),
+    )
     scope = {
         "type": "http",
         "method": "GET",
