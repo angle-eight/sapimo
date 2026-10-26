@@ -15,7 +15,7 @@ Sapimo は、AWS バックエンドのローカル開発環境を手軽に再現
 - 単一コンテナ設計による素早い起動と、コード変更時のホットリロード
 - S3・DynamoDB 等の AWS データをローカルファイルとして視認・編集できる
 
-**配布形態**: `pip install sapimo` でインストールし、別リポジトリ（利用先プロジェクト）で使う。
+**配布形態**: `pip install git+https://github.com/angle-eight/sapimo.git` でインストールし（PyPI には未登録）、別リポジトリ（利用先プロジェクト）で使う。
 
 ---
 
@@ -49,7 +49,7 @@ Sapimo は、AWS バックエンドのローカル開発環境を手軽に再現
 | `sapimo init` | テンプレート解析 → `config.yaml` + `docker-compose.yml` + runtime 資産を `api_mock/` に生成 |
 | `sapimo init --template <file>` | 指定テンプレートから生成（`--cdk` で CDK CF 指定） |
 | `sapimo generate` | `config.yaml` から `app.py` に Mock 関数のひな形を追記 |
-| `sapimo start` | `api_mock/` で `docker compose up` を実行。`--build` `--detach` オプションあり |
+| `sapimo start` | `api_mock/` で `docker compose up -d` を実行。`--host`（公開する IP、既定 `127.0.0.1`）`--port`（既定 8000）`--build` オプションあり |
 | `sapimo status` | コンテナ内の AWS モックデータ状況を表示 |
 | `sapimo clean` | AWS モックデータを削除（`--service s3,dynamodb` でサービス指定可能） |
 

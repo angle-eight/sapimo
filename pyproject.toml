@@ -1,7 +1,7 @@
 [project]
 name = "sapimo"
 version = "0.0.1"
-description = "SAM(lambda-APIgateway) API Mock"
+description = "Local mock for applications built with AWS SAM / CDK"
 authors = [{ name = "ajinori" }]
 requires-python = ">=3.12,<4"
 readme = "README.md"
