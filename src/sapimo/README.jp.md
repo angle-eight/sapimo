@@ -259,4 +259,4 @@ Lambda もユーザーアプリも同一プロセス内で動くため、moto �
 
 - Dockerセットアップ: `docs/Docker-Setup.md`
 - Dockerアーキテクチャ: `docs/Docker-Architecture.md`
-- 開発者向けの実装計画・検証記録: `docs/Container-Feature-Recovery-Plan.md`
+- 開発者向けガイド: `CONTRIBUTING.md`
