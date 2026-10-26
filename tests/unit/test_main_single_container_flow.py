@@ -24,11 +24,8 @@ def test_create_config_generates_single_container_compose(tmp_path: Path, monkey
             assert overwrite is False
             out_path.write_text("paths: {}\n", encoding="utf-8")
 
-    created = cli_main.create_config(
-        template_file, parse_class=DummyParser, overwrite=False
-    )
+    cli_main.create_config(template_file, parse_class=DummyParser, overwrite=False)
 
-    assert created is True
     compose_file = api_mock_dir / "docker-compose.yml"
     assert compose_file.exists()
 

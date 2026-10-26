@@ -146,3 +146,38 @@ Resources:
     route = config["paths"]["/hello"]["get"]["Properties"]
     assert route["EventType"] == EventType.APIGW_V2.name
     assert route["AuthType"] == AuthType.NONE.name
+
+
+def test_sam_parser_resources_without_properties_are_parsed(tmp_path: Path):
+    template = write_template(
+        tmp_path,
+        """
+Resources:
+  DataBucket:
+    Type: AWS::S3::Bucket
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+  ListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/list/
+      Handler: app.handler
+      Runtime: python3.12
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref DataBucket
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /items
+            Method: get
+""",
+    )
+
+    config = SamParser(template)._get_config_dict()
+
+    route = config["paths"]["/items"]["get"]["Properties"]
+    assert route["Environment"]["Variables"]["BUCKET_NAME"] == "DataBucket"
+    assert "DataBucket" in config["s3"]
