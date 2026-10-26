@@ -30,6 +30,7 @@ def test_generate_single_compose_file(tmp_path: Path):
         service["environment"]["PYTHONPATH"] == "/workspace:/workspace/api_mock/docker"
     )
     assert "..:/workspace:rw" in service["volumes"]
+    assert service["ports"] == ["${SAPIMO_HOST:-127.0.0.1}:${SAPIMO_PORT:-8000}:3000"]
 
     docker_root = api_mock_dir / "docker"
     assert (docker_root / "single" / "Dockerfile").exists()

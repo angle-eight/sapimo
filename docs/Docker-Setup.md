@@ -15,7 +15,7 @@
 ## 2. インストール
 
 ```bash
-pip install sapimo
+pip install git+https://github.com/angle-eight/sapimo.git
 ```
 
 ---
@@ -33,7 +33,7 @@ sapimo generate
 sapimo start
 ```
 
-起動後は `http://localhost:8000` にアクセスします。
+起動後は `http://localhost:8000` にアクセスします。ポートは既定で `127.0.0.1` にだけ公開されます（他の PC から使う場合だけ `--host 0.0.0.0`）。
 
 > 注意: sapimo を更新した後は、`api_mock/docker/` runtime 資産更新のため `sapimo init` を再実行してください。
 

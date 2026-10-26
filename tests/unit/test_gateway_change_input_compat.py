@@ -69,9 +69,9 @@ def anyio_backend():
 
 def test_input_override_accepts_keyword_arguments_for_backward_compatibility():
     """旧ゲートウェイ互換: InputOverride(path=...) 形式を受け付ける"""
-    override = InputOverride(path="/simple-trades", method="POST")
+    override = InputOverride(path="/todos", method="POST")
 
-    assert override.data["path"] == "/simple-trades"
+    assert override.data["path"] == "/todos"
     assert override.data["method"] == "POST"
 
 
@@ -264,13 +264,13 @@ async def test_tc_ovr_004_body_override_works(monkeypatch):
 @pytest.mark.anyio
 async def test_invoke_lambda_non_200_returns_http_502(monkeypatch):
     gateway = _create_gateway(monkeypatch)
-    route_info = {"function_name": "simple-trades_post", "path": "/simple-trades"}
+    route_info = {"function_name": "todos_post", "path": "/todos"}
 
     async def fake_build_event(request, path, ri):
         return _base_event()
 
     monkeypatch.setattr(gateway, "_build_lambda_event", fake_build_event)
-    gateway.lambda_containers["simple-trades_post"] = "lambda-simple-trades-post"
+    gateway.lambda_containers["todos_post"] = "lambda-todos-post"
 
     from unittest.mock import MagicMock
     import httpx
@@ -287,13 +287,13 @@ async def test_invoke_lambda_non_200_returns_http_502(monkeypatch):
     scope = {
         "type": "http",
         "method": "POST",
-        "path": "/simple-trades",
+        "path": "/todos",
         "query_string": b"",
         "headers": [],
     }
     request = FastAPIRequest(scope)
 
     with pytest.raises(HTTPException) as exc_info:
-        await gateway._invoke_lambda(route_info, request, "simple-trades")
+        await gateway._invoke_lambda(route_info, request, "todos")
 
     assert exc_info.value.status_code == 502

@@ -125,7 +125,7 @@ class SingleContainerComposeGenerator:
                         },
                     },
                     "command": ["python", "/workspace/api_mock/docker/gateway/main.py"],
-                    "ports": ["${SAPIMO_PORT:-8000}:3000"],
+                    "ports": ["${SAPIMO_HOST:-127.0.0.1}:${SAPIMO_PORT:-8000}:3000"],
                     "environment": env,
                     "volumes": [
                         "..:/workspace:rw",
