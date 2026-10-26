@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from jose import jwt
+from joserfc import jws
 from pydantic import BaseModel
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, Response
@@ -911,7 +911,7 @@ class LambdaGateway:
                 return None
 
             try:
-                claims = jwt.get_unverified_claims(token)
+                claims = json.loads(jws.extract_compact(token.encode()).payload)
                 return {"jwt": {"claims": claims, "scopes": None}}
             except Exception:
                 return None
