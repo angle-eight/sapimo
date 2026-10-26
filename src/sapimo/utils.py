@@ -107,49 +107,6 @@ def search_api_impl():
         return None
 
 
-def create_config_template(output_path: Path):
-    t = """
-paths:
-  /hello_world: # your API path
-    post:       # your API method
-      Properties:  # this is Lambda Properties (like aws sam's template)
-        CodeUri: lambda/greeting/     # required
-        Handler: app.lambda_handler   # required
-        Architectures:
-        - x86_64
-        Environment:
-          Variables:
-            BucketName: test-bucket
-            TableName: test-table
-        Layers:
-        - my_layer/
-        Runtime: python3.9
-        Timeout: 3
-s3:            # if your lambda uses s3 bucket, "s3" item is required.
-  MyBucket:
-    BucketName: MyBucket
-dynamodb:      # if your lambda uses dynamoDB, "dynamodb" item is required.
-  MyTable:
-    TableName: MyTable
-    AttributeDefinitions:
-    - AttributeName: PartitionKey
-      AttributeType: S
-    - AttributeName: RangeKey
-      AttributeType: S
-    KeySchema:
-    - AttributeName: PartitionKey
-      KeyType: HASH
-    - AttributeName: RangeKey
-      KeyType: RANGE
-    ProvisionedThroughput:
-      ReadCapacityUnits: 10
-      WriteCapacityUnits: 10
-    """
-    with open(output_path, "w") as f:
-        f.write(t)
-    return
-
-
 def add_element(d1: dict, d2: dict):
     """d1 has priority"""
     for k, v in d1.items():

@@ -191,7 +191,7 @@ class SamParser(CfResourceParser):
         retain api and httpAPI resources (for auth)
         """
         tp = resource["Type"]
-        props = resource["Properties"]
+        props = resource.get("Properties", {})
         if tp == "AWS::Serverless::Function":
             return {"Ref": name, "Arn": self._arn_tmp.format("function", name)}
         elif tp == "AWS::Serverless::Api":

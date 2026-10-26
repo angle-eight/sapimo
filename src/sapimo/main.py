@@ -8,7 +8,7 @@ import hashlib
 from sapimo.parser.sam_parser import SamParser
 from sapimo.parser.cdk_parser import CdkCfParser
 from sapimo.parser.tf_plan_parser import TerraformPlanParser
-from sapimo.utils import create_config_template, LogManager
+from sapimo.utils import LogManager
 from sapimo.constants import CONFIG_FILE, WORKING_DIR
 
 logger = LogManager.setup_logger(__file__)
@@ -65,26 +65,12 @@ def init(template, cdk, tf_plan, app_module):
         create_config_for_fastapi_app(app_module)
         return
     if tf_plan:
-        plan_path = Path(tf_plan).resolve()
-        if not create_config_from_terraform(plan_path, overwrite=False):
-            print(
-                f"{plan_path.name} file not found. "
-                "dummy config.yaml is created. you need to change it."
-            )
-            create_config_template(CONFIG_FILE)
-            exit()
+        create_config_from_terraform(Path(tf_plan).resolve(), overwrite=False)
     elif template == "":
         create_config_default()
     else:
-        template_path = Path(template).resolve()
         parser = SamParser if not cdk else CdkCfParser
-        if not create_config(template_path, parse_class=parser, overwrite=False):
-            print(
-                f"{template_path.name} file not found. "
-                "dummy config.yaml is created. you need to change it."
-            )
-            create_config_template(CONFIG_FILE)
-            exit()
+        create_config(Path(template).resolve(), parse_class=parser, overwrite=False)
 
     if app_module and CONFIG_FILE.exists():
         _append_app_module_to_config(CONFIG_FILE, app_module)
@@ -152,61 +138,36 @@ def create_config_default():
     exit(0)
 
 
-def create_config_from_terraform(plan_file: Path, overwrite: bool) -> bool:
-    """
-    Parse a terraform plan JSON file and write config.yaml + docker-compose.yml.
-    Returns False if *plan_file* does not exist.
-    """
-    if not plan_file.exists():
-        return False
-    WORKING_DIR.mkdir(exist_ok=True)
-    try:
-        parser = TerraformPlanParser(plan_file)
-        parser.create_config_file(CONFIG_FILE, overwrite)
-
-        from sapimo.docker.single_compose_generator import (
-            SingleContainerComposeGenerator,
-        )
-
-        compose_gen = SingleContainerComposeGenerator(CONFIG_FILE)
-        compose_gen.generate_compose_file()
-        click.echo(f"Generated docker-compose.yml in {WORKING_DIR}")
-
-        _warn_old_config_format(CONFIG_FILE)
-        return True
-    except Exception as e:
-        logger.exception("terraform plan parse error: %s", e)
-        return False
+def create_config_from_terraform(plan_file: Path, overwrite: bool) -> None:
+    """Parse a terraform plan JSON file and write config.yaml + docker-compose.yml."""
+    create_config(plan_file, parse_class=TerraformPlanParser, overwrite=overwrite)
 
 
-def create_config(template: Path, parse_class: Callable, overwrite: bool):
+def create_config(template: Path, parse_class: Callable, overwrite: bool) -> None:
     """
     parse template.yaml and convert to config.yaml
     """
     if not template.exists():
-        return False
-    else:
-        WORKING_DIR.mkdir(exist_ok=True)
-        try:
-            parser = parse_class(template)
-            parser.create_config_file(CONFIG_FILE, overwrite)
+        raise click.ClickException(f"{template} not found.")
+    WORKING_DIR.mkdir(exist_ok=True)
+    try:
+        parser = parse_class(template)
+        parser.create_config_file(CONFIG_FILE, overwrite)
+    except Exception as e:
+        logger.exception("config parse error: %s", e)
+        raise click.ClickException(f"Failed to parse {template.name}: {e!r}") from e
 
-            # 単一コンテナ用 Docker Compose 自動生成
-            from sapimo.docker.single_compose_generator import (
-                SingleContainerComposeGenerator,
-            )
+    # 単一コンテナ用 Docker Compose 自動生成
+    from sapimo.docker.single_compose_generator import (
+        SingleContainerComposeGenerator,
+    )
 
-            compose_gen = SingleContainerComposeGenerator(CONFIG_FILE)
-            compose_gen.generate_compose_file()
-            click.echo(f"Generated docker-compose.yml in {WORKING_DIR}")
+    compose_gen = SingleContainerComposeGenerator(CONFIG_FILE)
+    compose_gen.generate_compose_file()
+    click.echo(f"Generated docker-compose.yml in {WORKING_DIR}")
 
-            # 旧記法チェック：生成されたconfig.yamlに古いフォーマット（handler直下）がないか確認
-            _warn_old_config_format(CONFIG_FILE)
-
-            return True
-        except Exception as e:
-            logger.exception("config parse error: %s", e)
-            return False
+    # 旧記法チェック：生成されたconfig.yamlに古いフォーマット（handler直下）がないか確認
+    _warn_old_config_format(CONFIG_FILE)
 
 
 @main.command()
