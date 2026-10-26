@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Sample todo application for sapimo
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Handler: app.handler
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref TodoTable
+        BUCKET_NAME: !Ref AttachmentBucket
+
+Resources:
+  TodoTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: sample-todo-table
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: todoId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: todoId
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+
+  AttachmentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: sample-todo-attachments
+
+  TodoApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: dev
+
+  ListTodosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/todos
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TodoApi
+            Path: /todos
+            Method: get
+
+  CreateTodoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/todos
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TodoApi
+            Path: /todos
+            Method: post
+
+  GetTodoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/todos
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TodoApi
+            Path: /todos/{todoId}
+            Method: get
+
+  DeleteTodoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/todos
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TodoApi
+            Path: /todos/{todoId}
+            Method: delete

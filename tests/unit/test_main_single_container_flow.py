@@ -82,3 +82,8 @@ def test_start_uses_single_service_compose_command(tmp_path: Path, monkeypatch):
     assert calls["env"]["SAPIMO_HOST"] == "127.0.0.1"
     assert calls["env"]["SAPIMO_PORT"] == "9010"
     assert before_cwd == after_cwd
+
+
+def test_start_host_option_defaults_to_loopback():
+    host_option = next(p for p in cli_main.start.params if p.name == "host")
+    assert host_option.default == "127.0.0.1"

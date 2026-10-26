@@ -1,11 +1,14 @@
 # Sapimo
 
-Sapimo は、AWS を使うアプリケーションをローカルで再現するための Python ライブラリです。
+Sapimo は、AWS SAM / CDK で作ったアプリケーションをローカルで再現するための Python ライブラリです。
 SAM/CDK 由来の定義を入力に、`api_mock/config.yaml` を中心としたローカル実行環境を生成します。
+
+> **ローカルでの開発専用です。** JWT 認可のモックはトークンの署名を検証せず、CORS はすべてのオリジンを許可します。
+> 共有の検証環境や本番環境では使わないでください。
 
 ## プロジェクトの性質
 
-1. 配布形態はライブラリ（`pip install sapimo` 前提）です
+1. 配布形態はライブラリです（PyPI には未登録のため、GitHub からインストールします）
 2. 実行形態は単一コンテナです（`sapimo` サービスのみ）
 
 ## サポートサービス
@@ -21,7 +24,7 @@ SAM/CDK 由来の定義を入力に、`api_mock/config.yaml` を中心とした�
 ## クイックスタート
 
 ```bash
-pip install sapimo
+pip install git+https://github.com/angle-eight/sapimo.git
 
 # template.yaml または cdk.out/*.template.json から設定と runtime 資産を生成
 sapimo init
@@ -34,6 +37,9 @@ sapimo start
 ```
 
 起動後は `http://localhost:8000` にアクセスします。
+
+ポートは既定で `127.0.0.1` にだけ公開され、同じネットワークの他の PC からは使えません。
+他の PC から使う必要がある場合だけ `sapimo start --host 0.0.0.0` を指定してください。
 
 ## 重要な運用ルール
 
@@ -111,3 +117,8 @@ Lambda もユーザーアプリも同一プロセス内で動くため、moto �
 - [Cognito サポート](docs/Cognito-Support.md)
 
 コントリビューター・実装者向けは [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
+脆弱性の報告は [SECURITY.md](SECURITY.md) を参照してください。
+
+## 商標
+
+AWS および関連するサービス名は Amazon.com, Inc. またはその関連会社の商標です。sapimo は AWS と提携・公認の関係にありません。

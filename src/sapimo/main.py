@@ -316,8 +316,8 @@ def generate_mock_api(filepath: Path):
 @click.option(
     "--host",
     type=str,
-    default="0.0.0.0",
-    help="Bind socket to this host.",
+    default="127.0.0.1",
+    help="Host IP to publish the port on. Use 0.0.0.0 to allow access from other machines.",
     show_default=True,
 )
 @click.option(
@@ -365,7 +365,7 @@ def start(host: str, port: int, build: bool):
         )
 
         subprocess.run(cmd, env=env, check=True)
-        click.echo(f"✅ Sapimo started at http://localhost:{port}")
+        click.echo(f"✅ Sapimo started at http://{host}:{port}")
         click.echo("   Run 'sapimo log lambda' to see Lambda execution logs.")
     except subprocess.CalledProcessError:
         click.echo("❌ Failed to start container")

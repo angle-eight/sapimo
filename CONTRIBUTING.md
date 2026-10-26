@@ -7,18 +7,17 @@ sapimo 本体の実装・改修・コントリビューションを行う方向�
 ```bash
 git clone https://github.com/angle-eight/sapimo.git
 cd sapimo
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync
 ```
 
 ## テスト実行
 
 ```bash
 # 全テスト
-python -m pytest tests/unit -q
+uv run python -m pytest tests/unit -q
 
 # 個別
-python -m pytest tests/unit/test_single_compose_generator.py -q
+uv run python -m pytest tests/unit/test_single_compose_generator.py -q
 ```
 
 ## ドキュメント
@@ -31,3 +30,12 @@ python -m pytest tests/unit/test_single_compose_generator.py -q
 | [コードベースマップ](docs/llm/codebase-map.md) | 全モジュールの責務・主要クラス・関数一覧 |
 | [Mock システム](docs/llm/mock-system.md) | Mock Router / AWS Mock / データ同期の仕組み |
 | [開発ルール](docs/llm/rules.md) | 不変条件・変更時チェックリスト |
+
+## ライセンス
+
+プルリクエストで送られたコードは、このプロジェクトのライセンス（MIT）で提供されたものとして扱います。
+自分で書いたコードか、MIT と両立するライセンスのコードだけを送ってください。
+
+## 脆弱性の報告
+
+脆弱性は公開の Issue に書かず、[SECURITY.md](SECURITY.md) の方法で報告してください。
