@@ -22,6 +22,7 @@ def _compose_project_name() -> str:
 
 
 @click.group()
+@click.version_option(package_name="sapimo")
 def main():
     """Sapimo - SAM API Mock Server"""
     pass

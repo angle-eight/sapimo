@@ -113,11 +113,11 @@ Lambda もユーザーアプリも同一プロセス内で動くため、moto �
 
 ## ドキュメント
 
-- [Docker セットアップ](docs/Docker-Setup.md)
-- [Cognito サポート](docs/Cognito-Support.md)
+- [Docker セットアップ](https://github.com/angle-eight/sapimo/blob/main/docs/Docker-Setup.md)
+- [Cognito サポート](https://github.com/angle-eight/sapimo/blob/main/docs/Cognito-Support.md)
 
-コントリビューター・実装者向けは [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
-脆弱性の報告は [SECURITY.md](SECURITY.md) を参照してください。
+コントリビューター・実装者向けは [CONTRIBUTING.md](https://github.com/angle-eight/sapimo/blob/main/CONTRIBUTING.md) を参照してください。
+脆弱性の報告は [SECURITY.md](https://github.com/angle-eight/sapimo/blob/main/SECURITY.md) を参照してください。
 
 ## 商標
 
