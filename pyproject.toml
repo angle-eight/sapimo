@@ -1,10 +1,24 @@
 [project]
 name = "sapimo"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Local mock for applications built with AWS SAM / CDK"
 authors = [{ name = "ajinori" }]
-requires-python = ">=3.12,<4"
+requires-python = ">=3.12"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["aws", "sam", "cdk", "lambda", "api-gateway", "mock", "local-development"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing :: Mocking",
+]
 dependencies = [
     "httpx>=0.28.1",
     "fastapi[standard]>=0.162.0",
@@ -14,6 +28,11 @@ dependencies = [
     "joserfc>=1.7.7",
     "click>=8.5.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/angle-eight/sapimo"
+Repository = "https://github.com/angle-eight/sapimo"
+Issues = "https://github.com/angle-eight/sapimo/issues"
 
 [project.scripts]
 sapimo = "sapimo.main:main"
@@ -25,6 +44,9 @@ dev = [
     "pytest-env>=1.8.1",
     "pytest-mock>=3.17.0",
 ]
+
+[tool.hatch.version]
+path = "src/sapimo/__version__.py"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/sapimo", "src/sapimo/docker/templates"]
