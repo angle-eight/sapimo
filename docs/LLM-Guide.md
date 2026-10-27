@@ -15,7 +15,7 @@ Sapimo は、AWS バックエンドのローカル開発環境を手軽に再現
 - 単一コンテナ設計による素早い起動と、コード変更時のホットリロード
 - S3・DynamoDB 等の AWS データをローカルファイルとして視認・編集できる
 
-**配布形態**: `pip install git+https://github.com/angle-eight/sapimo.git` でインストールし（PyPI には未登録）、別リポジトリ（利用先プロジェクト）で使う。
+**配布形態**: `pip install sapimo`（PyPI）でインストールし、別リポジトリ（利用先プロジェクト）で使う。
 
 ---
 

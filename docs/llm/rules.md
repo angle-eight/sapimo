@@ -11,7 +11,7 @@
 ### アーキテクチャの不変条件
 
 1. **単一コンテナ設計**: ランタイムは `sapimo` サービス 1 つのみ。AWS モック（moto）は同一プロセスで動作する
-2. **ライブラリ配布前提**: `pip install git+https://github.com/angle-eight/sapimo.git` で他リポジトリから使われる（PyPI には未登録）。`workspace/src` の存在を前提にしない
+2. **ライブラリ配布前提**: `pip install sapimo`（PyPI）で他リポジトリから使われる。`workspace/src` の存在を前提にしない
 3. **runtime import は同梱資産で完結**: コンテナ内での `sapimo` パッケージの import は `api_mock/docker/sapimo/` にコピーされた資産で解決する
 4. **再生成可能**: `api_mock/docker/` 配下の資産はすべて `sapimo init` で再生成可能であること
 5. **Compose project 名の一意化**: プロジェクトパスの SHA1 ダイジェストで一意化し、複数リポジトリ間の衝突を回避
