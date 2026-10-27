@@ -15,7 +15,7 @@
 ## 2. インストール
 
 ```bash
-pip install git+https://github.com/angle-eight/sapimo.git
+pip install sapimo
 ```
 
 ---

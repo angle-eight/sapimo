@@ -8,7 +8,7 @@ SAM/CDK 由来の定義を入力に、`api_mock/config.yaml` を中心とした�
 
 ## プロジェクトの性質
 
-1. 配布形態はライブラリです（PyPI には未登録のため、GitHub からインストールします）
+1. 配布形態はライブラリです（PyPI の `sapimo`）
 2. 実行形態は単一コンテナです（`sapimo` サービスのみ）
 
 ## サポートサービス
@@ -24,7 +24,7 @@ SAM/CDK 由来の定義を入力に、`api_mock/config.yaml` を中心とした�
 ## クイックスタート
 
 ```bash
-pip install git+https://github.com/angle-eight/sapimo.git
+pip install sapimo
 
 # template.yaml または cdk.out/*.template.json から設定と runtime 資産を生成
 sapimo init
